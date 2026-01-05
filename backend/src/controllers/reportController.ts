@@ -38,24 +38,36 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
     }
     const totalStudents = await studentsQuery.first();
 
-    // Get total beds
-    let totalBedsQuery = db('rooms')
-      .sum('capacity as total_beds');
+    // Get total beds - calculate from room_types since capacity column was removed
+    let totalBedsQuery = db('rooms as r')
+      .leftJoin('room_types as rt', 'r.room_type_id', 'rt.room_type_id')
+      .select(db.raw(`
+        SUM(
+          CASE 
+            WHEN rt.room_type_name REGEXP '^[0-9]+$' THEN CAST(rt.room_type_name AS UNSIGNED)
+            WHEN LOWER(rt.room_type_name) LIKE '%single%' THEN 1
+            WHEN LOWER(rt.room_type_name) LIKE '%double%' THEN 2
+            WHEN LOWER(rt.room_type_name) LIKE '%triple%' THEN 3
+            WHEN LOWER(rt.room_type_name) LIKE '%four%' OR LOWER(rt.room_type_name) LIKE '%4%' THEN 4
+            WHEN LOWER(rt.room_type_name) LIKE '%five%' OR LOWER(rt.room_type_name) LIKE '%5%' THEN 5
+            WHEN LOWER(rt.room_type_name) LIKE '%six%' OR LOWER(rt.room_type_name) LIKE '%6%' THEN 6
+            WHEN LOWER(rt.room_type_name) LIKE '%dormitory%' THEN 10
+            ELSE COALESCE(r.room_type_id, 0)
+          END
+        ) as total_beds
+      `));
     if (hostelIds.length > 0) {
-      totalBedsQuery = totalBedsQuery.whereIn('hostel_id', hostelIds);
+      totalBedsQuery = totalBedsQuery.whereIn('r.hostel_id', hostelIds);
     }
     const bedsData = await totalBedsQuery.first();
 
-    // Get occupied beds from active room allocations (not from rooms.occupied_beds)
-    let occupiedBedsQuery = db('room_allocations as ra')
-      .join('students as s', 'ra.student_id', 's.student_id')
-      .join('rooms as r', 'ra.room_id', 'r.room_id')
-      .where('s.status', 'Active')
-      .where('ra.is_active', 1)
-      .whereNull('ra.check_out_date')
+    // Get occupied beds - count active students with room_id (room_allocations table was removed)
+    let occupiedBedsQuery = db('students')
+      .where('status', 'Active')
+      .whereNotNull('room_id')
       .count('* as count');
     if (hostelIds.length > 0) {
-      occupiedBedsQuery = occupiedBedsQuery.whereIn('r.hostel_id', hostelIds);
+      occupiedBedsQuery = occupiedBedsQuery.whereIn('hostel_id', hostelIds);
     }
     const occupiedData = await occupiedBedsQuery.first();
     const occupiedBeds = occupiedData?.count || 0;
@@ -418,10 +430,25 @@ export const getOccupancyTrends = async (req: AuthRequest, res: Response) => {
     // Get current occupancy by hostel
     let query = db('hostel_master as h')
       .leftJoin('rooms as r', 'h.hostel_id', 'r.hostel_id')
+      .leftJoin('room_types as rt', 'r.room_type_id', 'rt.room_type_id')
       .select(
         'h.hostel_id',
         'h.hostel_name',
-        db.raw('COALESCE(SUM(r.capacity), 0) as total_beds'),
+        db.raw(`
+          COALESCE(SUM(
+            CASE 
+              WHEN rt.room_type_name REGEXP '^[0-9]+$' THEN CAST(rt.room_type_name AS UNSIGNED)
+              WHEN LOWER(rt.room_type_name) LIKE '%single%' THEN 1
+              WHEN LOWER(rt.room_type_name) LIKE '%double%' THEN 2
+              WHEN LOWER(rt.room_type_name) LIKE '%triple%' THEN 3
+              WHEN LOWER(rt.room_type_name) LIKE '%four%' OR LOWER(rt.room_type_name) LIKE '%4%' THEN 4
+              WHEN LOWER(rt.room_type_name) LIKE '%five%' OR LOWER(rt.room_type_name) LIKE '%5%' THEN 5
+              WHEN LOWER(rt.room_type_name) LIKE '%six%' OR LOWER(rt.room_type_name) LIKE '%6%' THEN 6
+              WHEN LOWER(rt.room_type_name) LIKE '%dormitory%' THEN 10
+              ELSE COALESCE(r.room_type_id, 0)
+            END
+          ), 0) as total_beds
+        `),
         db.raw('COALESCE(SUM(r.occupied_beds), 0) as occupied_beds')
       )
       .groupBy('h.hostel_id', 'h.hostel_name');
