@@ -16,3 +16,6 @@ SET ra.hostel_id = r.hostel_id;
 
 
 
+
+
+

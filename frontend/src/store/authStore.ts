@@ -9,12 +9,13 @@ interface AuthState {
   login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: User | null) => void;
-  initializeAuth: () => void;
+  initializeAuth: () => Promise<void>;
+  verifyAndSyncAuth: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       isAuthenticated: false,
       isLoading: true,
@@ -27,6 +28,8 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
+          // Broadcast to other tabs
+          window.localStorage.setItem('auth-change-event', Date.now().toString());
         } catch (error) {
           set({ user: null, isAuthenticated: false });
           throw error;
@@ -36,6 +39,8 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         await authService.logout();
         set({ user: null, isAuthenticated: false });
+        // Broadcast to other tabs
+        window.localStorage.setItem('auth-change-event', Date.now().toString());
       },
 
       setUser: (user: User | null) => {
@@ -45,14 +50,76 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      initializeAuth: () => {
-        const user = authService.getStoredUser();
-        const isAuthenticated = authService.isAuthenticated();
-        set({
-          user,
-          isAuthenticated,
-          isLoading: false,
-        });
+      initializeAuth: async () => {
+        const token = localStorage.getItem('authToken');
+        const storedUser = authService.getStoredUser();
+        
+        if (!token || !storedUser) {
+          set({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+          return;
+        }
+
+        // Verify token matches stored user by fetching current user from backend
+        try {
+          const currentUser = await authService.getCurrentUser();
+          
+          // Check if stored user matches current user from token
+          if (currentUser.user_id === storedUser.user_id && currentUser.role_id === storedUser.role_id) {
+            set({
+              user: currentUser,
+              isAuthenticated: true,
+              isLoading: false,
+            });
+            // Update stored user to ensure it's in sync
+            localStorage.setItem('user', JSON.stringify(currentUser));
+          } else {
+            // Mismatch - clear and logout
+            await authService.logout();
+            set({
+              user: null,
+              isAuthenticated: false,
+              isLoading: false,
+            });
+          }
+        } catch (error) {
+          // Token invalid or expired
+          await authService.logout();
+          set({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+        }
+      },
+
+      verifyAndSyncAuth: async () => {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          set({ user: null, isAuthenticated: false });
+          return;
+        }
+
+        try {
+          const currentUser = await authService.getCurrentUser();
+          const state = get();
+          
+          // If user changed, update state
+          if (!state.user || state.user.user_id !== currentUser.user_id || state.user.role_id !== currentUser.role_id) {
+            set({
+              user: currentUser,
+              isAuthenticated: true,
+            });
+            localStorage.setItem('user', JSON.stringify(currentUser));
+          }
+        } catch (error) {
+          // Token invalid
+          await authService.logout();
+          set({ user: null, isAuthenticated: false });
+        }
       },
     }),
     {
@@ -64,3 +131,13 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+// Listen for storage changes (other tabs logging in/out)
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'authToken' || e.key === 'user' || e.key === 'auth-change-event') {
+      const store = useAuthStore.getState();
+      store.verifyAndSyncAuth();
+    }
+  });
+}

@@ -276,10 +276,33 @@ export const updateHostel = async (req: AuthRequest, res: Response) => {
     } = req.body;
 
     // Validate required fields
-    if (!hostel_name || !address || !city || !owner_id) {
+    if (!hostel_name || !address || !city) {
       return res.status(400).json({
         success: false,
-        error: 'Required fields: hostel_name, address, city, owner_id'
+        error: 'Required fields: hostel_name, address, city'
+      });
+    }
+
+    // Determine owner_id: 
+    // - For owners: use existing owner_id (they can't change it)
+    // - For admins: require owner_id in request body
+    let finalOwnerId: number;
+    if (req.user?.role_id === 2) {
+      // Owner editing their own hostel - use existing owner_id
+      finalOwnerId = existingHostel.owner_id;
+    } else if (req.user?.role_id === 1) {
+      // Admin editing - require owner_id in request
+      if (!owner_id) {
+        return res.status(400).json({
+          success: false,
+          error: 'owner_id is required for admin updates'
+        });
+      }
+      finalOwnerId = owner_id;
+    } else {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied.'
       });
     }
 
@@ -296,11 +319,11 @@ export const updateHostel = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // If owner_id is being changed, verify new owner exists
-    if (owner_id !== existingHostel.owner_id) {
+    // If owner_id is being changed (only for admin), verify new owner exists
+    if (req.user?.role_id === 1 && finalOwnerId !== existingHostel.owner_id) {
       // Verify new owner exists and is a hostel owner
       const newOwner = await db('users')
-        .where({ user_id: owner_id, role_id: 2, is_active: 1 })
+        .where({ user_id: finalOwnerId, role_id: 2, is_active: 1 })
         .first();
 
       if (!newOwner) {
@@ -322,7 +345,7 @@ export const updateHostel = async (req: AuthRequest, res: Response) => {
       state,
       pincode,
       hostel_type,
-      owner_id,
+      owner_id: finalOwnerId,
       updated_at: new Date()
     };
 

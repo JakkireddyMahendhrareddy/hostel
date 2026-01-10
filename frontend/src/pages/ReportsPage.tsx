@@ -64,37 +64,37 @@ export const ReportsPage: React.FC = () => {
   // Show download option only for owners on owner reports page
   if (isOwnerReports && isOwner) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
         {/* Header */}
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Reports</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Download monthly income and expense reports</p>
+          <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">Reports</h1>
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">Download monthly income and expense reports</p>
         </div>
 
-        {/* Download Section - Minimal UI */}
-        <div className="flex items-center gap-4">
+        {/* Download Section - Responsive UI */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
           {/* Month Selector */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
               Month:
             </label>
             <input
               type="month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              className="flex-1 sm:flex-initial px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
             />
           </div>
 
-          {/* Excel Download Button - Minimal */}
+          {/* Excel Download Button - Full width on mobile */}
           <button
             onClick={handleDownloadExcel}
             disabled={downloadingExcel || !selectedMonth}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white dark:text-gray-300 bg-blue-800 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-blue-700 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-800 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-blue-700 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {downloadingExcel ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 <span>Generating...</span>
               </>
             ) : (

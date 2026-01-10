@@ -12,3 +12,6 @@ ALTER TABLE hostel_master DROP COLUMN IF EXISTS email;
 
 
 
+
+
+

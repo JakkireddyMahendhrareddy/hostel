@@ -53,10 +53,27 @@ const HostelPageRouter: React.FC = () => {
 
 function App() {
   const initializeAuth = useAuthStore((state) => state.initializeAuth);
+  const verifyAndSyncAuth = useAuthStore((state) => state.verifyAndSyncAuth);
 
   useEffect(() => {
+    // Initialize auth and verify token matches user
     initializeAuth();
   }, [initializeAuth]);
+
+  // Verify auth when tab becomes visible (user switches back to tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Tab is now visible, verify auth is still valid
+        verifyAndSyncAuth();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [verifyAndSyncAuth]);
 
   return (
     <ThemeProvider>
