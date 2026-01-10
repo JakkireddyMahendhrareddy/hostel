@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Plus, Edit, Calendar, AlertCircle, MinusCircle } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Plus, Edit, Calendar, AlertCircle, MinusCircle, Eye, ChevronDown, ChevronUp, Search, X, DollarSign } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import api from '../services/api';
@@ -106,6 +106,13 @@ export const MonthlyFeeManagementPage: React.FC = () => {
   const [paymentModes, setPaymentModes] = useState<PaymentMode[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'FULLY_PAID' | 'PARTIALLY_PAID' | 'PENDING'>('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [swipedItemId, setSwipedItemId] = useState<number | null>(null);
+  const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
+  const [showStatsCard, setShowStatsCard] = useState(false);
+  const swipeStartX = useRef<number | null>(null);
+  const swipeStartY = useRef<number | null>(null);
+  const swipeCurrentX = useRef<number | null>(null);
 
   // Modal states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -429,6 +436,60 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     }
   };
 
+  // Swipe gesture handlers
+  const handleTouchStart = (e: React.TouchEvent, itemId: number) => {
+    swipeStartX.current = e.touches[0].clientX;
+    swipeStartY.current = e.touches[0].clientY;
+    swipeCurrentX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (swipeStartX.current === null || swipeStartY.current === null) return;
+    
+    swipeCurrentX.current = e.touches[0].clientX;
+    const deltaX = swipeCurrentX.current - swipeStartX.current;
+    const deltaY = e.touches[0].clientY - swipeStartY.current;
+
+    // Only handle horizontal swipes (ignore if vertical movement is greater)
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+      e.preventDefault();
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent, itemId: number) => {
+    if (swipeStartX.current === null || swipeCurrentX.current === null) return;
+
+    const deltaX = swipeStartX.current - swipeCurrentX.current;
+    const swipeThreshold = 80; // Minimum distance to trigger swipe
+
+    if (deltaX > swipeThreshold) {
+      // Swiped left - show actions
+      setSwipedItemId(itemId);
+    } else if (deltaX < -swipeThreshold) {
+      // Swiped right - hide actions
+      setSwipedItemId(null);
+    } else {
+      // Small movement - check if clicked/tapped
+      if (Math.abs(deltaX) < 10 && Math.abs(swipeStartY.current! - e.changedTouches[0].clientY) < 10) {
+        // It's a tap, not a swipe - open payment history
+        const fee = fees.find(f => (f.fee_id || f.student_id) === itemId);
+        if (fee) {
+          handleFetchPaymentHistory(fee);
+        }
+      }
+    }
+
+    swipeStartX.current = null;
+    swipeStartY.current = null;
+    swipeCurrentX.current = null;
+  };
+
+  const handleActionClick = (e: React.MouseEvent, action: () => void) => {
+    e.stopPropagation();
+    setSwipedItemId(null);
+    action();
+  };
+
 
   console.log('[MonthlyFeesPage] Render - loading:', loading, 'summary:', summary, 'fees.length:', fees.length);
 
@@ -440,10 +501,58 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     );
   }
 
+  const filteredFees = fees.filter((fee) => {
+    // Apply status filter
+    if (statusFilter !== 'ALL') {
+      const statusMap: Record<string, string> = {
+        'FULLY_PAID': 'Fully Paid',
+        'PARTIALLY_PAID': 'Partially Paid',
+        'PENDING': 'Pending'
+      };
+      if (fee.fee_status !== statusMap[statusFilter]) return false;
+    }
+
+    // Apply search filter
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase();
+      const includes = (field: any) => {
+        if (field === null || field === undefined) return false;
+        return field.toString().toLowerCase().includes(searchLower);
+      };
+
+      return (
+        includes(fee.first_name) ||
+        includes(fee.last_name) ||
+        includes(fee.phone) ||
+        includes(fee.email) ||
+        includes(fee.room_number) ||
+        includes(fee.floor_number) ||
+        includes(fee.fee_status) ||
+        includes(fee.monthly_rent) ||
+        includes(fee.total_due) ||
+        includes(fee.balance)
+      );
+    }
+
+    return true;
+  });
+
+  // Calculate statistics
+  const totalAmount = filteredFees.reduce((sum, fee) => sum + (fee.total_due || 0), 0);
+  const pendingAmount = filteredFees.reduce((sum, fee) => sum + (fee.balance || 0), 0);
+
+  // Format month for display (e.g., "Jan 2026")
+  const formatMonthDisplay = (monthValue: string) => {
+    if (!monthValue) return '';
+    const [year, month] = monthValue.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  };
+
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+      {/* Mobile Header - Keep Original */}
+      <div className="md:hidden space-y-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900">
             Monthly Fee Management
@@ -453,71 +562,258 @@ export const MonthlyFeeManagementPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Month Selector */}
-        <div className="flex items-center gap-4">
+        {/* Mobile Month Selector and Status Filter */}
+        <div className="flex flex-row items-center gap-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Month:</label>
+            <div className="relative inline-block">
+              <input
+                type="month"
+                value={currentMonth}
+                onChange={(e) => setCurrentMonth(e.target.value)}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                style={{ fontSize: '16px', zIndex: 10 }}
+              />
+              <div className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white shadow-sm pointer-events-none flex items-center gap-1.5 min-w-[6rem]">
+                <span>{formatMonthDisplay(currentMonth)}</span>
+                <span className="text-gray-500">📅</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Status:</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'FULLY_PAID' | 'PARTIALLY_PAID' | 'PENDING')}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white flex-1 min-w-0"
+            >
+              <option value="ALL">All</option>
+              <option value="FULLY_PAID">Fully Paid</option>
+              <option value="PARTIALLY_PAID">Partially Paid</option>
+              <option value="PENDING">Pending</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Mobile Search Bar */}
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-4 w-4 text-gray-400" />
+          </div>
           <input
-            type="month"
-            value={currentMonth}
-            onChange={(e) => setCurrentMonth(e.target.value)}
-            className="px-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
+            type="text"
+            placeholder="Search by name, phone, email, room, status..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="block w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
           />
         </div>
       </div>
 
-      {/* Filter Dropdown and Summary Cards */}
-      <div className="flex items-center justify-between gap-4">
+      {/* Desktop: Single Line Header */}
+      <div className="hidden md:flex items-center justify-between gap-4">
+        {/* Left: Title */}
+        <div className="flex-1">
+          <h1 className="text-xl font-bold text-gray-900">
+            Monthly Fee Management
+          </h1>
+        </div>
+        
+        {/* Right: Total Amount, Pending Amount, Month, Status Filter, Search */}
         <div className="flex items-center gap-3">
-          <label className="text-sm font-medium text-gray-700">Filter by Status:</label>
+          {/* Total Amount Card */}
+          <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-600 font-medium">Total:</span>
+              <span className="text-sm font-bold text-blue-600">₹{Math.floor(totalAmount).toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+
+          {/* Pending Amount Card */}
+          <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-600 font-medium">Pending:</span>
+              <span className="text-sm font-bold text-red-600">₹{Math.floor(pendingAmount).toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+
+          {/* Month Picker */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Month:</label>
+            <div className="relative inline-block cursor-pointer">
+              <input
+                type="month"
+                value={currentMonth}
+                onChange={(e) => setCurrentMonth(e.target.value)}
+                className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
+                style={{ fontSize: '16px', zIndex: 30, margin: 0, padding: 0 }}
+              />
+              <div className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white shadow-sm pointer-events-none flex items-center gap-1.5 whitespace-nowrap select-none">
+                <span>{formatMonthDisplay(currentMonth)}</span>
+                <span className="text-gray-500">📅</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'FULLY_PAID' | 'PARTIALLY_PAID' | 'PENDING')}
-            className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
           >
             <option value="ALL">All</option>
             <option value="FULLY_PAID">Fully Paid</option>
             <option value="PARTIALLY_PAID">Partially Paid</option>
             <option value="PENDING">Pending</option>
           </select>
-        </div>
 
-        {/* Summary Cards - Inline Format */}
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-gray-700 font-medium">Total Amount</span>
-          <span className="text-gray-900 font-bold">
-            ₹{Math.floor(fees
-              .filter((fee) => {
-                if (statusFilter === 'ALL') return true;
-                const statusMap: Record<string, string> = {
-                  'FULLY_PAID': 'Fully Paid',
-                  'PARTIALLY_PAID': 'Partially Paid',
-                  'PENDING': 'Pending'
-                };
-                return fee.fee_status === statusMap[statusFilter];
-              })
-              .reduce((sum, fee) => sum + (fee.total_due || 0), 0))
-              .toLocaleString('en-IN')}
-          </span>
-          <span className="text-gray-400">|</span>
-          <span className="text-red-600 font-medium">Pending Amount</span>
-          <span className="text-red-600 font-bold">
-            ₹{Math.floor(fees
-              .filter((fee) => {
-                if (statusFilter === 'ALL') return true;
-                const statusMap: Record<string, string> = {
-                  'FULLY_PAID': 'Fully Paid',
-                  'PARTIALLY_PAID': 'Partially Paid',
-                  'PENDING': 'Pending'
-                };
-                return fee.fee_status === statusMap[statusFilter];
-              })
-              .reduce((sum, fee) => sum + (fee.balance || 0), 0))
-              .toLocaleString('en-IN')}
-          </span>
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search students..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm w-48"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Fees Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* Mobile Card View */}
+      <div className="block md:hidden space-y-3">
+        {filteredFees.length === 0 && !loading ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">
+              {statusFilter === 'ALL'
+                ? `No active students found for ${currentMonth}. All active students with rooms will appear here automatically.`
+                : `No students found with status "${statusFilter === 'FULLY_PAID' ? 'Fully Paid' : statusFilter === 'PARTIALLY_PAID' ? 'Partially Paid' : 'Pending'}" for ${currentMonth}.`}
+            </p>
+          </div>
+        ) : (
+          filteredFees.map((fee, index) => {
+            const isExpanded = expandedCardId === (fee.fee_id || fee.student_id);
+            return (
+              <div
+                key={fee.fee_id || fee.student_id}
+                className={`bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-all ${isExpanded ? 'shadow-lg' : ''}`}
+              >
+                <div className="p-4">
+                  {/* Collapsed View */}
+                  <div
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setExpandedCardId(isExpanded ? null : (fee.fee_id || fee.student_id))}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="flex-shrink-0">
+                        {isExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-gray-400" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-base font-semibold text-gray-900 truncate">
+                          {fee.first_name} {fee.last_name}
+                        </p>
+                        <p className="text-xs text-gray-500">{fee.phone}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${getStatusColor(fee.fee_status)}`}>
+                        {fee.fee_status}
+                      </span>
+                      <span className="text-base font-bold text-red-600">
+                        ₹{Math.floor(fee.balance)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Expanded View */}
+                  {isExpanded && (
+                    <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Room</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {fee.room_number || '-'} (Floor {fee.floor_number || '-'})
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Admitted</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {fee.admission_date ? new Date(fee.admission_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Monthly Rent</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            ₹{Math.floor(fee.monthly_rent)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Carry Forward</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {fee.carry_forward > 0 ? `₹${Math.floor(fee.carry_forward)}` : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Total Due</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            ₹{Math.floor(fee.total_due)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Paid</p>
+                          <p className="text-sm font-medium text-green-600">
+                            ₹{Math.floor(fee.paid_amount)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Balance</p>
+                          <p className={`text-sm font-medium ${fee.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            ₹{Math.floor(fee.balance)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedCardId(null);
+                            handleFetchPaymentHistory(fee);
+                          }}
+                          className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                          title="View History"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedCardId(null);
+                            handleOpenPaymentModal(fee);
+                          }}
+                          className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                          title="Record Payment"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-primary-600">
@@ -539,17 +835,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {fees
-                  .filter((fee) => {
-                    if (statusFilter === 'ALL') return true;
-                    const statusMap: Record<string, string> = {
-                      'FULLY_PAID': 'Fully Paid',
-                      'PARTIALLY_PAID': 'Partially Paid',
-                      'PENDING': 'Pending'
-                    };
-                    return fee.fee_status === statusMap[statusFilter];
-                  })
-                  .map((fee, index) => (
+                {filteredFees.map((fee, index) => (
                   <tr
                     key={fee.fee_id || fee.student_id}
                     className="hover:bg-gray-50 cursor-pointer"
@@ -631,15 +917,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
           </table>
         </div>
 
-        {fees.filter((fee) => {
-          if (statusFilter === 'ALL') return true;
-          const statusMap: Record<string, string> = {
-            'FULLY_PAID': 'Fully Paid',
-            'PARTIALLY_PAID': 'Partially Paid',
-            'PENDING': 'Pending'
-          };
-          return fee.fee_status === statusMap[statusFilter];
-        }).length === 0 && !loading && (
+        {filteredFees.length === 0 && !loading && (
           <div className="text-center py-12">
             <p className="text-gray-500">
               {statusFilter === 'ALL'
@@ -651,28 +929,18 @@ export const MonthlyFeeManagementPage: React.FC = () => {
 
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
           <p className="text-sm text-gray-700">
-            Showing <span className="font-medium">
-              {fees.filter((fee) => {
-                if (statusFilter === 'ALL') return true;
-                const statusMap: Record<string, string> = {
-                  'FULLY_PAID': 'Fully Paid',
-                  'PARTIALLY_PAID': 'Partially Paid',
-                  'PENDING': 'Pending'
-                };
-                return fee.fee_status === statusMap[statusFilter];
-              }).length}
-            </span> student{fees.filter((fee) => {
-              if (statusFilter === 'ALL') return true;
-              const statusMap: Record<string, string> = {
-                'FULLY_PAID': 'Fully Paid',
-                'PARTIALLY_PAID': 'Partially Paid',
-                'PENDING': 'Pending'
-              };
-              return fee.fee_status === statusMap[statusFilter];
-            }).length !== 1 ? 's' : ''}
+            Showing <span className="font-medium">{filteredFees.length}</span> student{filteredFees.length !== 1 ? 's' : ''}
             {statusFilter !== 'ALL' && ` (${statusFilter === 'FULLY_PAID' ? 'Fully Paid' : statusFilter === 'PARTIALLY_PAID' ? 'Partially Paid' : 'Pending'})`}
           </p>
         </div>
+      </div>
+
+      {/* Mobile Summary */}
+      <div className="block md:hidden px-4 py-3 bg-gray-50 rounded-lg">
+        <p className="text-sm text-gray-700">
+          Showing <span className="font-medium">{filteredFees.length}</span> student{filteredFees.length !== 1 ? 's' : ''}
+          {statusFilter !== 'ALL' && ` (${statusFilter === 'FULLY_PAID' ? 'Fully Paid' : statusFilter === 'PARTIALLY_PAID' ? 'Partially Paid' : 'Pending'})`}
+        </p>
       </div>
 
       {/* Payment Modal */}
@@ -964,7 +1232,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                   const formatMonth = (monthStr: string) => {
                     const [year, month] = monthStr.split('-');
                     const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-                    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                   };
 
                   return sortedMonths.map((monthKey, monthIndex) => {
@@ -1230,6 +1498,93 @@ export const MonthlyFeeManagementPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Floating Action Buttons - Mobile Only */}
+      {!showPaymentModal && !showEditFeeModal && !showPaymentHistoryModal && !showAdjustmentModal && !showStatsCard && (
+        <>
+          {/* Left Side: Statistics Button (Orange) */}
+          <button
+            onClick={() => setShowStatsCard(true)}
+            className="fixed bottom-6 left-6 z-40 h-14 w-14 bg-orange-500 text-white rounded-full shadow-lg hover:bg-orange-600 transition-all hover:scale-110 active:scale-95 flex items-center justify-center md:hidden"
+            title="View Statistics"
+          >
+            <Plus className="h-6 w-6" />
+          </button>
+
+          {/* Right Side: Quick Actions Button (Blue) */}
+          <button
+            onClick={() => {
+              // Show first pending fee payment modal if available
+              const pendingFee = filteredFees.find(f => f.balance > 0);
+              if (pendingFee) {
+                handleOpenPaymentModal(pendingFee);
+              } else {
+                toast.info('No pending fees to record payment');
+              }
+            }}
+            className="fixed bottom-6 right-6 z-40 h-14 w-14 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700 transition-all hover:scale-110 active:scale-95 flex items-center justify-center md:hidden"
+            title="Quick Payment"
+          >
+            <Plus className="h-6 w-6" />
+          </button>
+        </>
+      )}
+
+      {/* Statistics Card Modal - Mobile Only */}
+      {showStatsCard && (
+        <div className="md:hidden fixed inset-0 z-30">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-30 transition-opacity duration-300"
+            onClick={() => setShowStatsCard(false)}
+          ></div>
+
+          {/* Bottom Sheet - Full Width */}
+          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-10 transform transition-transform duration-300 ease-out">
+            {/* Drag Handle */}
+            <div className="flex justify-center pt-4 pb-2">
+              <div className="w-16 h-1.5 bg-gray-300 rounded-full"></div>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 pb-8">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Fee Statistics</h3>
+                <button
+                  onClick={() => setShowStatsCard(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="h-5 w-5 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Total Amount */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200 w-full">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-2 font-medium">Total Amount</p>
+                      <p className="text-4xl font-bold text-blue-600">₹{Math.floor(totalAmount).toLocaleString('en-IN')}</p>
+                    </div>
+                    <DollarSign className="h-10 w-10 text-blue-400" />
+                  </div>
+                </div>
+
+                {/* Pending Amount */}
+                <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-2xl p-6 border-2 border-red-200 w-full">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-2 font-medium">Pending Amount</p>
+                      <p className="text-4xl font-bold text-red-600">₹{Math.floor(pendingAmount).toLocaleString('en-IN')}</p>
+                    </div>
+                    <DollarSign className="h-10 w-10 text-red-400" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

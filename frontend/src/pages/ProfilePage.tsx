@@ -96,14 +96,14 @@ export const ProfilePage: React.FC = () => {
 
   if (!user) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Profile</h1>
-          <p className="text-sm text-gray-600 mt-1">View your profile information</p>
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900">Profile</h1>
+          <p className="text-xs sm:text-sm text-gray-600 mt-1">View your profile information</p>
         </div>
         <Card>
-          <div className="text-center py-12">
-            <p className="text-sm text-gray-500">No user data available</p>
+          <div className="text-center py-8 sm:py-12">
+            <p className="text-xs sm:text-sm text-gray-500">No user data available</p>
           </div>
         </Card>
       </div>
@@ -111,11 +111,11 @@ export const ProfilePage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-bold text-gray-900">Profile</h1>
-        <p className="text-sm text-gray-600 mt-1">View and manage your hostel information</p>
+        <h1 className="text-lg sm:text-xl font-bold text-gray-900">Profile</h1>
+        <p className="text-xs sm:text-sm text-gray-600 mt-1">View and manage your hostel information</p>
       </div>
 
       {/* Hostel Details Card - Only for Hostel Owners */}
@@ -123,36 +123,34 @@ export const ProfilePage: React.FC = () => {
         <>
           {loading ? (
             <Card>
-              <div className="text-center py-12">
+              <div className="text-center py-8 sm:py-12">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-                <p className="mt-2 text-sm text-gray-600">Loading hostel details...</p>
+                <p className="mt-2 text-xs sm:text-sm text-gray-600">Loading hostel details...</p>
               </div>
             </Card>
           ) : !hostel ? (
             <Card>
-              <div className="text-center py-12">
-                <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-sm font-medium text-gray-900 mb-2">No hostel assigned</h3>
-                <p className="text-xs text-gray-600">
+              <div className="text-center py-8 sm:py-12">
+                <Building2 className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
+                <h3 className="text-xs sm:text-sm font-medium text-gray-900 mb-2">No hostel assigned</h3>
+                <p className="text-[10px] sm:text-xs text-gray-600 px-4">
                   Please contact the admin to get a hostel assigned to your account.
                 </p>
               </div>
             </Card>
           ) : (
             <Card>
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 {/* Hostel Header Section */}
-                <div className="flex items-start justify-between mb-6 pb-6 border-b border-gray-200">
-                  <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-full bg-primary-100 flex items-center justify-center">
-                      <Building2 className="h-7 w-7 text-primary-600" />
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-gray-200">
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                      <Building2 className="h-6 w-6 sm:h-7 sm:w-7 text-primary-600" />
                     </div>
-                    <div>
-                      <h2 className="text-lg font-bold text-gray-900">{hostel.hostel_name}</h2>
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-base sm:text-lg font-bold text-gray-900 truncate">{hostel.hostel_name}</h2>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`px-3 py-1.5 text-xs font-medium rounded-full ${
+                    <span className={`px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-full whitespace-nowrap flex-shrink-0 ${
                       hostel.hostel_type === 'Boys'
                         ? 'bg-blue-100 text-blue-700'
                         : hostel.hostel_type === 'Girls'
@@ -161,21 +159,24 @@ export const ProfilePage: React.FC = () => {
                     }`}>
                       {hostel.hostel_type}
                     </span>
+                  </div>
+                  <div className="flex items-center justify-end flex-shrink-0">
                     <button
                       onClick={() => setIsEditModalOpen(true)}
-                      className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
+                      className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-xs sm:text-sm whitespace-nowrap"
                     >
-                      <Edit className="h-4 w-4" />
-                      Edit Details
+                      <Edit className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      <span className="hidden sm:inline">Edit Details</span>
+                      <span className="sm:hidden">Edit</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Hostel Details Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
                   {/* Contact Information */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Contact Information</h3>
+                  <div className="space-y-3 sm:space-y-4">
+                    <h3 className="text-xs sm:text-sm font-semibold text-gray-900 mb-2 sm:mb-3">Contact Information</h3>
 
                     <div className="flex items-start gap-3">
                       <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
@@ -218,8 +219,8 @@ export const ProfilePage: React.FC = () => {
                   </div>
 
                   {/* Hostel Information */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Hostel Information</h3>
+                  <div className="space-y-3 sm:space-y-4">
+                    <h3 className="text-xs sm:text-sm font-semibold text-gray-900 mb-2 sm:mb-3">Hostel Information</h3>
 
                     <div className="flex items-start gap-3">
                       <Users className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
@@ -264,13 +265,13 @@ export const ProfilePage: React.FC = () => {
 
                 {/* Amenities Section */}
                 {hostel.amenities && hostel.amenities.length > 0 && (
-                  <div className="pt-6 border-t border-gray-200">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Available Amenities</h3>
-                    <div className="flex flex-wrap gap-2">
+                  <div className="pt-4 sm:pt-6 border-t border-gray-200">
+                    <h3 className="text-xs sm:text-sm font-semibold text-gray-900 mb-2 sm:mb-3">Available Amenities</h3>
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
                       {hostel.amenities.map((amenity, index) => (
                         <span
                           key={index}
-                          className="px-3 py-1.5 bg-primary-50 text-primary-700 text-xs font-medium rounded-full"
+                          className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-primary-50 text-primary-700 text-[10px] sm:text-xs font-medium rounded-full"
                         >
                           {amenity}
                         </span>

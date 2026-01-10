@@ -8,3 +8,6 @@ DROP COLUMN total_rooms;
 
 
 
+
+
+

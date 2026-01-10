@@ -19,18 +19,32 @@ import toast from 'react-hot-toast';
 
 export const MainLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleLogout = async () => {
+  const handleLogoutClick = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const handleLogoutConfirm = async () => {
     try {
+      setIsLoggingOut(true);
       await logout();
       toast.success('Logged out successfully');
       navigate('/login');
     } catch (error) {
       toast.error('Logout failed');
+      setIsLoggingOut(false);
+    } finally {
+      setShowLogoutConfirm(false);
     }
+  };
+
+  const handleLogoutCancel = () => {
+    setShowLogoutConfirm(false);
   };
 
   const isAdmin = user?.role === 'Main Admin';
@@ -178,7 +192,7 @@ export const MainLayout: React.FC = () => {
               {/* Logout Button */}
               <Tooltip text="Logout" position="bottom">
                 <button
-                  onClick={handleLogout}
+                  onClick={handleLogoutClick}
                   className="h-8 w-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
                 >
                   <LogOut className="h-4 w-4 text-primary-600" />
@@ -195,6 +209,53 @@ export const MainLayout: React.FC = () => {
           </div>
         </main>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full shadow-xl">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
+                  <LogOut className="h-5 w-5 text-orange-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">Confirm Logout</h2>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-4">
+              <p className="text-gray-700 mb-2">
+                Are you sure you want to logout?
+              </p>
+              <p className="text-sm text-gray-600">
+                You will need to login again to access your account.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleLogoutCancel}
+                disabled={isLoggingOut}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleLogoutConfirm}
+                disabled={isLoggingOut}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoggingOut ? 'Logging out...' : 'Logout'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

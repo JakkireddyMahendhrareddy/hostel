@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Edit, Search, Trash2 } from "lucide-react";
+import { Plus, Edit, Search, ChevronDown, ChevronUp, Eye, Users, X } from "lucide-react";
 import api from "../services/api";
 import toast from "react-hot-toast";
-import { validateIDProof, formatIDProofNumber } from "../utils/idProofValidators";
 
 interface Student {
   student_id: number;
@@ -27,21 +26,10 @@ interface Student {
   admission_status: "Paid" | "Unpaid";
   due_date: string;
   status: "Active" | "Inactive";
-  inactive_date: string | null; // Vacated date when student becomes inactive
   room_id: number;
   room_number: string;
   floor_number: number;
   monthly_rent: number;
-  // Fee information (current month)
-  fee_id?: number | null;
-  fee_month?: string | null;
-  fee_monthly_rent?: number | null;
-  carry_forward?: number | null;
-  total_due?: number | null;
-  paid_amount?: number | null;
-  balance?: number | null;
-  fee_status?: "Pending" | "Partially Paid" | "Fully Paid" | "Overdue" | null;
-  fee_due_date?: string | null;
 }
 
 interface Room {
@@ -89,8 +77,13 @@ export const StudentsPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [idProofError, setIdProofError] = useState<string>("");
-  const [deleteConfirmModal, setDeleteConfirmModal] = useState<Student | null>(null);
+  const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
+  const [showStatsCard, setShowStatsCard] = useState(false);
+  const [hostelStats, setHostelStats] = useState<{
+    totalStudents: number;
+    totalCapacity: number;
+    remaining: number;
+  } | null>(null);
 
   // Format date to DD-MM-YYYY for display
   const formatDateDisplay = (dateStr: string) => {
@@ -142,6 +135,7 @@ export const StudentsPage: React.FC = () => {
   useEffect(() => {
     fetchStudents();
     fetchRooms();
+    fetchHostelStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -248,32 +242,54 @@ export const StudentsPage: React.FC = () => {
     }
   };
 
+  const fetchHostelStats = async () => {
+    try {
+      const [roomsResponse, studentsResponse] = await Promise.all([
+        api.get("/rooms"),
+        api.get("/students")
+      ]);
+      
+      const rooms = roomsResponse.data.data || [];
+      const allStudents = studentsResponse.data.data || [];
+      
+      const totalCapacity = rooms.reduce((sum: number, room: Room) => {
+        const capacity = room.total_capacity || (room.occupied_beds + room.available_beds) || room.room_type_id || 0;
+        return sum + capacity;
+      }, 0);
+      
+      const totalOccupied = rooms.reduce((sum: number, room: Room) => sum + (room.occupied_beds || 0), 0);
+      const totalStudents = allStudents.filter((s: Student) => s.status === "Active").length;
+      const remaining = totalCapacity - totalOccupied;
+      
+      setHostelStats({
+        totalStudents,
+        totalCapacity,
+        remaining
+      });
+    } catch (error) {
+      console.error("Fetch hostel stats error:", error);
+    }
+  };
+
+  // Update stats when students change
+  useEffect(() => {
+    if (students.length > 0) {
+      fetchHostelStats();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [students]);
+
   const fetchHostelAdmissionFee = async () => {
     try {
       const response = await api.get("/hostels");
       const hostels = response.data.data || [];
       if (hostels.length > 0) {
-        const hostel = hostels[0];
-        const admissionFee = hostel.admission_fee || 0;
-        const hostelType = hostel.hostel_type || "";
-        
+        const admissionFee = hostels[0].admission_fee || 0;
         // Auto-populate admission fee when opening modal for new student
         if (!editingStudent) {
-          // Set default gender based on hostel type
-          let defaultGender = "";
-          if (hostelType === "Boys") {
-            defaultGender = "Male";
-          } else if (hostelType === "Girls") {
-            defaultGender = "Female";
-          } else if (hostelType === "Co-ed" || hostelType === "Co-Ed") {
-            // For Co-ed, leave empty (user must select)
-            defaultGender = "";
-          }
-          
           setFormData((prev) => ({
             ...prev,
             admission_fee: admissionFee.toString(),
-            gender: defaultGender || prev.gender,
           }));
         }
       }
@@ -288,18 +304,6 @@ export const StudentsPage: React.FC = () => {
     >
   ) => {
     const { name, value } = e.target;
-    
-    // Limit phone and guardian_phone to 10 digits (numbers only)
-    if (name === "phone" || name === "guardian_phone") {
-      // Only allow numbers and limit to 10 digits
-      const numericValue = value.replace(/\D/g, "").slice(0, 10);
-      setFormData((prev) => ({
-        ...prev,
-        [name]: numericValue,
-      }));
-      return;
-    }
-    
     setFormData((prev) => {
       const updated = { ...prev, [name]: value };
 
@@ -334,114 +338,12 @@ export const StudentsPage: React.FC = () => {
         updated.due_date = dueDate.toISOString().split("T")[0];
       }
 
-      // Validate ID Proof Number in real-time
-      if (name === "id_proof_number" || name === "id_proof_type") {
-        const proofType = name === "id_proof_type" ? value : updated.id_proof_type;
-        let proofNumber = name === "id_proof_number" ? value : updated.id_proof_number;
-        
-        // Limit input length based on ID proof type (count only alphanumeric characters, ignore spaces)
-        if (name === "id_proof_number" && proofType && proofNumber) {
-          const cleaned = proofNumber.replace(/\s/g, ''); // Remove spaces for counting
-          let maxChars = 0;
-          
-          switch (proofType) {
-            case 'Aadhar':
-            case 'Aadhaar':
-              maxChars = 12; // 12 digits only
-              break;
-            case 'PAN':
-              maxChars = 10; // 10 characters (5 letters + 4 digits + 1 letter)
-              break;
-            case 'Voter ID':
-              maxChars = 10; // 10 characters (3 letters + 7 digits)
-              break;
-            case 'Driving License':
-              maxChars = 15; // 15 characters (2 letters + 2 digits + 4 year + 7 digits)
-              break;
-            default:
-              maxChars = 20; // Default limit
-          }
-          
-          // If cleaned length exceeds max, truncate by removing excess characters from end
-          if (cleaned.length > maxChars) {
-            let truncated = '';
-            let charCount = 0;
-            // Rebuild string, counting only alphanumeric characters
-            for (let i = 0; i < proofNumber.length; i++) {
-              if (proofNumber[i] === ' ') {
-                truncated += ' '; // Keep spaces
-              } else if (charCount < maxChars) {
-                truncated += proofNumber[i];
-                charCount++;
-              } else {
-                break; // Stop when we've reached maxChars
-              }
-            }
-            proofNumber = truncated;
-            updated.id_proof_number = proofNumber;
-          }
-        }
-        
-        if (proofType && proofNumber && proofNumber.trim()) {
-          const validation = validateIDProof(proofType, proofNumber);
-          if (!validation.isValid) {
-            setIdProofError(validation.error || "Invalid ID Proof number");
-          } else {
-            setIdProofError("");
-          }
-        } else {
-          setIdProofError("");
-        }
-      }
-
       return updated;
     });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Validate phone number length
-    if (formData.phone.length !== 10) {
-      toast.error("Phone number must be exactly 10 digits");
-      return;
-    }
-
-    // Check if phone number already exists (only for new students)
-    if (!editingStudent) {
-      const existingStudent = students.find(
-        (s) => s.phone === formData.phone && s.status === "Active"
-      );
-      if (existingStudent) {
-        toast.error("This phone number is already registered to another student");
-        return;
-      }
-    } else {
-      // For editing, check if phone exists for a different student
-      const existingStudent = students.find(
-        (s) => s.phone === formData.phone && 
-               s.student_id !== editingStudent.student_id && 
-               s.status === "Active"
-      );
-      if (existingStudent) {
-        toast.error("This phone number is already registered to another student");
-        return;
-      }
-    }
-
-    // Validate ID Proof Number
-    let formattedIdProofNumber = formData.id_proof_number || null;
-    if (formData.id_proof_type && formData.id_proof_number) {
-      const idProofValidation = validateIDProof(formData.id_proof_type, formData.id_proof_number);
-      if (!idProofValidation.isValid) {
-        toast.error(idProofValidation.error || "Invalid ID Proof number");
-        setIdProofError(idProofValidation.error || "Invalid ID Proof number");
-        return;
-      }
-      setIdProofError("");
-      // Format the ID proof number before storing
-      formattedIdProofNumber = formatIDProofNumber(formData.id_proof_type, formData.id_proof_number);
-    }
 
     const payload = {
       first_name: formData.first_name,
@@ -456,7 +358,7 @@ export const StudentsPage: React.FC = () => {
       permanent_address: formData.permanent_address || null,
       present_working_address: formData.present_working_address || null,
       id_proof_type: formData.id_proof_type || null,
-      id_proof_number: formattedIdProofNumber,
+      id_proof_number: formData.id_proof_number || null,
       id_proof_status: formData.id_proof_status,
       admission_date: formData.admission_date,
       admission_fee: parseFloat(formData.admission_fee) || 0,
@@ -492,25 +394,8 @@ export const StudentsPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (student: Student) => {
-    try {
-      await api.delete(`/students/${student.student_id}`);
-      toast.success("Student deleted permanently");
-      fetchStudents();
-      fetchRooms();
-      setDeleteConfirmModal(null);
-    } catch (error) {
-      const errorMessage =
-        (error as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error || "Failed to delete student";
-      toast.error(errorMessage);
-      console.error("Delete student error:", error);
-    }
-  };
-
   const handleEdit = async (student: Student) => {
     setEditingStudent(student);
-    setIdProofError(""); // Clear any previous validation errors
 
     // Fetch all rooms including full ones for editing
     await fetchRooms(true);
@@ -595,8 +480,8 @@ export const StudentsPage: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+      {/* Mobile Header */}
+      <div className="md:hidden space-y-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900">
             Student Management
@@ -605,99 +490,212 @@ export const StudentsPage: React.FC = () => {
             Manage student registrations and room allocations
           </p>
         </div>
-        <button
-          onClick={async () => {
-            // Reset form first
-            setEditingStudent(null);
-            const dates = getInitialDates();
-            
-            // Fetch hostel type to set default gender
-            let defaultGender = "";
-            try {
-              const response = await api.get("/hostels");
-              const hostels = response.data.data || [];
-              if (hostels.length > 0) {
-                const hostelType = hostels[0].hostel_type || "";
-                if (hostelType === "Boys") {
-                  defaultGender = "Male";
-                } else if (hostelType === "Girls") {
-                  defaultGender = "Female";
-                } else if (hostelType === "Co-ed" || hostelType === "Co-Ed") {
-                  // For Co-ed, leave empty (user must select)
-                  defaultGender = "";
-                }
-              }
-            } catch (error) {
-              console.error("Fetch hostel type error:", error);
-              // Default to Male if error
-              defaultGender = "Male";
-            }
-            
-            setFormData({
-              first_name: "",
-              last_name: "",
-              date_of_birth: "",
-              gender: defaultGender,
-              phone: "",
-              email: "",
-              guardian_name: "",
-              guardian_phone: "",
-              guardian_relation: "Father",
-              permanent_address: "",
-              present_working_address: "",
-              id_proof_type: "Aadhar",
-              id_proof_number: "",
-              id_proof_status: "Not Submitted",
-              admission_date: dates.admissionDate,
-              admission_fee: "",
-              admission_status: "Unpaid",
-              due_date: dates.dueDate,
-              status: "Active",
-              room_id: "",
-              floor_number: "",
-              monthly_rent: "",
-            });
-            
-            fetchHostelAdmissionFee();
-            setShowModal(true);
-          }}
-          className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Add Student
-        </button>
-      </div>
 
-      {/* Search Bar and Filter */}
-      <div className="flex justify-between items-center gap-4">
-        {/* Search Bar */}
-        <div className="relative flex-1 max-w-md">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-4 w-4 text-gray-400" />
+        {/* Mobile Search Bar and Filter - Single Line */}
+        <div className="flex items-center gap-2">
+          {/* Search Bar */}
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Search students..."
+              value={searchTerm}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="block w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
+            />
           </div>
-          <input
-            type="text"
-            placeholder="Search by name, phone, email, room..."
-            value={searchTerm}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="block w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
-          />
-        </div>
 
-        {/* Status Filter Dropdown */}
-        <select
-          value={statusFilter}
-          onChange={(e) => handleStatusFilter(e.target.value as "Active" | "Inactive" | "All")}
-          className="px-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm min-w-[150px]"
-        >
-          <option value="Active">Active</option>
-          <option value="Inactive">Inactive</option>
-          <option value="All">All Students</option>
-        </select>
+          {/* Status Filter Dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => handleStatusFilter(e.target.value as "Active" | "Inactive" | "All")}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm whitespace-nowrap"
+          >
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+            <option value="All">All Students</option>
+          </select>
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* Desktop: Single Line Header */}
+      <div className="hidden md:flex items-center justify-between gap-4">
+        {/* Left: Title */}
+        <div className="flex-1">
+          <h1 className="text-xl font-bold text-gray-900">
+            Student Management
+          </h1>
+        </div>
+        
+        {/* Right: Search, Status Filter, Add Student */}
+        <div className="flex items-center gap-3">
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search students..."
+              value={searchTerm}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm w-48"
+            />
+          </div>
+
+          {/* Status Filter Dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => handleStatusFilter(e.target.value as "Active" | "Inactive" | "All")}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
+          >
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+            <option value="All">All Students</option>
+          </select>
+
+          {/* Add Student Button */}
+          <button
+            onClick={() => {
+              fetchHostelAdmissionFee();
+              setShowModal(true);
+            }}
+            className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm whitespace-nowrap"
+          >
+            <Plus className="h-5 w-5 mr-2" />
+            Add Student
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="block md:hidden space-y-3">
+        {filteredStudents.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">
+              {searchTerm
+                ? "No students found matching your search."
+                : "No students found. Add your first student to get started."}
+            </p>
+          </div>
+        ) : (
+          filteredStudents.map((student) => {
+            const isExpanded = expandedCardId === student.student_id;
+            return (
+              <div
+                key={student.student_id}
+                className={`bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-all ${isExpanded ? 'shadow-lg' : ''}`}
+              >
+                <div className="p-4">
+                  {/* Collapsed View */}
+                  <div
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setExpandedCardId(isExpanded ? null : student.student_id)}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="flex-shrink-0">
+                        {isExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-gray-400" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-base font-semibold text-gray-900 truncate">
+                          {student.first_name} {student.last_name}
+                        </p>
+                        <p className="text-xs text-gray-500">{student.phone}</p>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 ml-2 text-right">
+                      {student.admission_status === "Paid" ? (
+                        <span className="px-2.5 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full">
+                          Paid
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 text-xs font-medium text-yellow-800 bg-yellow-100 rounded-full">
+                          Unpaid
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded View */}
+                  {isExpanded && (
+                    <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Room</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {student.room_number || "Not Allocated"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Floor</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {student.floor_number || "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Rent/Month</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {student.monthly_rent
+                              ? `₹${Math.floor(student.monthly_rent)}`
+                              : "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Admission Fee</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {student.admission_fee
+                              ? `₹${Math.floor(student.admission_fee)}`
+                              : "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Admitted Date</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {formatDateDisplay(student.admission_date)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedCardId(null);
+                            setViewingStudent(student);
+                          }}
+                          className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                          title="View Details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedCardId(null);
+                            handleEdit(student);
+                          }}
+                          className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                          title="Edit"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-primary-600">
@@ -729,11 +727,6 @@ export const StudentsPage: React.FC = () => {
                 <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
                   Admitted Date
                 </th>
-                {statusFilter !== "Active" && (
-                  <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                    Vacated Date
-                  </th>
-                )}
                 <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
                   Actions
                 </th>
@@ -785,13 +778,6 @@ export const StudentsPage: React.FC = () => {
                   <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
                     {formatDateDisplay(student.admission_date)}
                   </td>
-                  {statusFilter !== "Active" && (
-                    <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
-                      {student.status === "Inactive" && student.inactive_date 
-                        ? formatDateDisplay(student.inactive_date) 
-                        : "-"}
-                    </td>
-                  )}
                   <td
                     className="px-3 py-2 whitespace-nowrap text-xs text-gray-500"
                     onClick={(e) => e.stopPropagation()}
@@ -804,18 +790,6 @@ export const StudentsPage: React.FC = () => {
                       >
                         <Edit className="h-4 w-4" />
                       </button>
-                      {student.status === "Inactive" && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConfirmModal(student);
-                          }}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete Student"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -848,6 +822,22 @@ export const StudentsPage: React.FC = () => {
             student{filteredStudents.length !== 1 ? "s" : ""}
           </p>
         </div>
+      </div>
+
+      {/* Mobile Summary */}
+      <div className="block md:hidden px-4 py-3 bg-gray-50 rounded-lg">
+        <p className="text-sm text-gray-700">
+          Showing{" "}
+          <span className="font-medium">{filteredStudents.length}</span> of{" "}
+          <span className="font-medium">
+            {statusFilter === "Active"
+              ? students.filter(s => s.status === "Active").length
+              : statusFilter === "Inactive"
+              ? students.filter(s => s.status === "Inactive").length
+              : students.length}
+          </span>{" "}
+          student{filteredStudents.length !== 1 ? "s" : ""}
+        </p>
       </div>
 
       {/* View Details Modal */}
@@ -1154,17 +1144,34 @@ export const StudentsPage: React.FC = () => {
       {/* Add/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20">
-            <div
-              className="fixed inset-0 bg-black opacity-50"
-              onClick={handleCloseModal}
-            ></div>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 transition-opacity duration-300"
+            onClick={handleCloseModal}
+          ></div>
 
-            <div className="relative bg-white rounded-lg max-w-4xl w-full p-6 z-10 max-h-[90vh] overflow-y-auto">
-              <h2 className="text-base font-bold text-gray-900 mb-3">
-                {editingStudent ? "Edit Student" : "Add New Student"}
-              </h2>
-
+          {/* Mobile: Bottom Sheet */}
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-10">
+            {/* Drag Handle and Header */}
+            <div className="sticky top-0 bg-white rounded-t-2xl pt-3 pb-2 z-20">
+              <div className="flex justify-center mb-2">
+                <div className="w-12 h-1 bg-gray-300 rounded-full"></div>
+              </div>
+              <div className="px-4 flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-900">
+                  {editingStudent ? "Edit Student" : "Add New Student"}
+                </h2>
+                <button
+                  onClick={handleCloseModal}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  title="Close"
+                >
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-4 pb-6">
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Personal Information */}
                 <div>
@@ -1223,7 +1230,6 @@ export const StudentsPage: React.FC = () => {
                         required
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       >
-                        <option value="">Select Gender</option>
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
                         <option value="Other">Other</option>
@@ -1240,16 +1246,9 @@ export const StudentsPage: React.FC = () => {
                         value={formData.phone}
                         onChange={handleInputChange}
                         required
-                        maxLength={10}
                         pattern="[0-9]{10}"
-                        placeholder="Enter 10 digit phone number"
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
-                      {formData.phone.length > 0 && formData.phone.length !== 10 && (
-                        <p className="text-xs text-red-600 mt-1">
-                          Phone number must be exactly 10 digits
-                        </p>
-                      )}
                     </div>
 
                     <div>
@@ -1359,16 +1358,9 @@ export const StudentsPage: React.FC = () => {
                         value={formData.guardian_phone}
                         onChange={handleInputChange}
                         required
-                        maxLength={10}
                         pattern="[0-9]{10}"
-                        placeholder="Enter 10 digit phone number"
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
-                      {formData.guardian_phone.length > 0 && formData.guardian_phone.length !== 10 && (
-                        <p className="text-xs text-red-600 mt-1">
-                          Phone number must be exactly 10 digits
-                        </p>
-                      )}
                     </div>
 
                     <div>
@@ -1429,12 +1421,7 @@ export const StudentsPage: React.FC = () => {
                       <select
                         name="id_proof_type"
                         value={formData.id_proof_type}
-                        onChange={(e) => {
-                          handleInputChange(e);
-                          // Clear ID proof number and error when type changes
-                          setFormData((prev) => ({ ...prev, id_proof_number: "" }));
-                          setIdProofError("");
-                        }}
+                        onChange={handleInputChange}
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       >
                         <option value="Aadhar">Aadhar Card</option>
@@ -1453,35 +1440,393 @@ export const StudentsPage: React.FC = () => {
                         name="id_proof_number"
                         value={formData.id_proof_number}
                         onChange={handleInputChange}
-                        maxLength={
-                          formData.id_proof_type === "Aadhar"
-                            ? 14 // 12 digits + 2 spaces (XXXX XXXX XXXX)
-                            : formData.id_proof_type === "PAN"
-                            ? 10 // ABCDE1234F (10 characters)
-                            : formData.id_proof_type === "Voter ID"
-                            ? 10 // ABC1234567 (10 characters)
-                            : formData.id_proof_type === "Driving License"
-                            ? 17 // TS09 20110012345 (with spaces: 15 chars + 2 spaces)
-                            : 20 // Default
-                        }
-                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                          idProofError ? "border-red-300 focus:border-red-500" : "border-gray-300"
-                        }`}
-                        placeholder={
-                          formData.id_proof_type === "Aadhar"
-                            ? "1234 5678 9012"
-                            : formData.id_proof_type === "PAN"
-                            ? "ABCDE1234F"
-                            : formData.id_proof_type === "Voter ID"
-                            ? "ABC1234567"
-                            : formData.id_proof_type === "Driving License"
-                            ? "TS09 20110012345"
-                            : "Enter ID Proof number"
-                        }
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
-                      {idProofError && (
-                        <p className="text-xs text-red-600 mt-1">{idProofError}</p>
-                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        ID Proof Status
+                      </label>
+                      <select
+                        name="id_proof_status"
+                        value={formData.id_proof_status}
+                        onChange={handleInputChange}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="Not Submitted">Not Submitted</option>
+                        <option value="Submitted">Submitted</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Room Allocation (Optional) */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                    Room Allocation {editingStudent ? "" : "(Optional)"}
+                  </h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Room
+                      </label>
+                      <select
+                        name="room_id"
+                        value={formData.room_id}
+                        onChange={handleInputChange}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="">Select Room</option>
+                        {rooms.map((room) => (
+                          <option key={room.room_id} value={room.room_id}>
+                            Room {room.room_number} (Floor {room.floor_number})
+                            - Total: {room.capacity} | Available:{" "}
+                            {room.available_beds}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Floor Number
+                      </label>
+                      <input
+                        type="text"
+                        name="floor_number"
+                        value={formData.floor_number}
+                        readOnly
+                        placeholder="Auto-filled"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Monthly Rent (₹)
+                      </label>
+                      <input
+                        type="number"
+                        name="monthly_rent"
+                        value={formData.monthly_rent}
+                        onChange={handleInputChange}
+                        min="0"
+                        step="100"
+                        placeholder="Enter monthly rent"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleCloseModal}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    {editingStudent ? "Update Student" : "Register Student"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* Desktop: Centered Modal */}
+          <div className="hidden md:flex items-center justify-center min-h-screen px-4 py-4">
+            <div className="relative bg-white rounded-lg max-w-4xl w-full p-6 z-10 max-h-[90vh] overflow-y-auto">
+              {/* Header with Close Button */}
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {editingStudent ? "Edit Student" : "Add New Student"}
+                </h2>
+                <button
+                  onClick={handleCloseModal}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  title="Close"
+                >
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Personal Information */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                    Personal Information
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        First Name *
+                      </label>
+                      <input
+                        type="text"
+                        name="first_name"
+                        value={formData.first_name}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        name="last_name"
+                        value={formData.last_name}
+                        onChange={handleInputChange}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Date of Birth
+                      </label>
+                      <input
+                        type="date"
+                        name="date_of_birth"
+                        value={formData.date_of_birth}
+                        onChange={handleInputChange}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Gender *
+                      </label>
+                      <select
+                        name="gender"
+                        value={formData.gender}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Phone *
+                      </label>
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        required
+                        pattern="[0-9]{10}"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Admission Date *
+                      </label>
+                      <input
+                        type="date"
+                        name="admission_date"
+                        value={formData.admission_date}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Admission Fee (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        name="admission_fee"
+                        value={formData.admission_fee}
+                        onChange={handleInputChange}
+                        required
+                        min="0"
+                        step="100"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Admission Status *
+                      </label>
+                      <select
+                        name="admission_status"
+                        value={formData.admission_status}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="Unpaid">Unpaid</option>
+                        <option value="Paid">Paid</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Status *
+                      </label>
+                      <select
+                        name="status"
+                        value={formData.status}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Guardian Information */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                    Guardian Information
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Guardian Name *
+                      </label>
+                      <input
+                        type="text"
+                        name="guardian_name"
+                        value={formData.guardian_name}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Guardian Phone *
+                      </label>
+                      <input
+                        type="tel"
+                        name="guardian_phone"
+                        value={formData.guardian_phone}
+                        onChange={handleInputChange}
+                        required
+                        pattern="[0-9]{10}"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Relation
+                      </label>
+                      <select
+                        name="guardian_relation"
+                        value={formData.guardian_relation}
+                        onChange={handleInputChange}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="Father">Father</option>
+                        <option value="Mother">Mother</option>
+                        <option value="Guardian">Guardian</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Address & ID Proof */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                    Address & ID Proof
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Permanent Address
+                      </label>
+                      <textarea
+                        name="permanent_address"
+                        value={formData.permanent_address}
+                        onChange={handleInputChange}
+                        rows={2}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Present Working Address
+                      </label>
+                      <textarea
+                        name="present_working_address"
+                        value={formData.present_working_address}
+                        onChange={handleInputChange}
+                        rows={2}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        ID Proof Type
+                      </label>
+                      <select
+                        name="id_proof_type"
+                        value={formData.id_proof_type}
+                        onChange={handleInputChange}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="Aadhar">Aadhar Card</option>
+                        <option value="PAN">PAN Card</option>
+                        <option value="Voter ID">Voter ID</option>
+                        <option value="Driving License">Driving License</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        ID Proof Number
+                      </label>
+                      <input
+                        type="text"
+                        name="id_proof_number"
+                        value={formData.id_proof_number}
+                        onChange={handleInputChange}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
                     </div>
 
                     <div>
@@ -1582,48 +1927,100 @@ export const StudentsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20">
-            <div
-              className="fixed inset-0 bg-black opacity-50"
-              onClick={() => setDeleteConfirmModal(null)}
-            ></div>
+      {/* Floating Action Buttons - Mobile Only */}
+      {!showModal && !viewingStudent && !showStatsCard && (
+        <>
+          {/* Left Side: Statistics Button (Orange) */}
+          <button
+            onClick={() => setShowStatsCard(true)}
+            className="fixed bottom-6 left-6 z-40 h-14 w-14 bg-orange-500 text-white rounded-full shadow-lg hover:bg-orange-600 transition-all hover:scale-110 active:scale-95 flex items-center justify-center md:hidden"
+            title="View Statistics"
+          >
+            <Plus className="h-6 w-6" />
+          </button>
 
-            <div className="relative bg-white rounded-lg max-w-md w-full p-6 z-10">
-              <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
-                <Trash2 className="h-6 w-6 text-red-600" />
-              </div>
-              
-              <h2 className="text-lg font-bold text-gray-900 text-center mb-2">
-                Delete Student
-              </h2>
-              
-              <p className="text-sm text-gray-600 text-center mb-6">
-                Are you sure you want to permanently delete{" "}
-                <span className="font-semibold">
-                  {deleteConfirmModal.first_name} {deleteConfirmModal.last_name}
-                </span>
-                ? This action cannot be undone and will delete all related data including payments, dues, and fees.
-              </p>
+          {/* Right Side: Add Student Button (Blue) */}
+          <button
+            onClick={() => {
+              fetchHostelAdmissionFee();
+              setShowModal(true);
+            }}
+            className="fixed bottom-6 right-6 z-40 h-14 w-14 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700 transition-all hover:scale-110 active:scale-95 flex items-center justify-center md:hidden"
+            title="Add Student"
+          >
+            <Plus className="h-6 w-6" />
+          </button>
+        </>
+      )}
 
-              <div className="flex justify-end space-x-3">
+      {/* Statistics Card Modal - Mobile Only */}
+      {showStatsCard && (
+        <div className="md:hidden fixed inset-0 z-30">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-30 transition-opacity duration-300"
+            onClick={() => setShowStatsCard(false)}
+          ></div>
+
+          {/* Bottom Sheet - Full Width */}
+          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-10 transform transition-transform duration-300 ease-out">
+            {/* Drag Handle */}
+            <div className="flex justify-center pt-4 pb-2">
+              <div className="w-16 h-1.5 bg-gray-300 rounded-full"></div>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 pb-8">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Hostel Statistics</h3>
                 <button
-                  type="button"
-                  onClick={() => setDeleteConfirmModal(null)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  onClick={() => setShowStatsCard(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(deleteConfirmModal)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Delete Permanently
+                  <X className="h-5 w-5 text-gray-400" />
                 </button>
               </div>
+
+              {hostelStats ? (
+                <div className="space-y-4">
+                  {/* Total Students */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200 w-full">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 mb-2 font-medium">Total Students</p>
+                        <p className="text-4xl font-bold text-blue-600">{hostelStats.totalStudents}</p>
+                      </div>
+                      <Users className="h-10 w-10 text-blue-400" />
+                    </div>
+                  </div>
+
+                  {/* Total Capacity */}
+                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 border-2 border-purple-200 w-full">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 mb-2 font-medium">Total Capacity</p>
+                        <p className="text-4xl font-bold text-purple-600">{hostelStats.totalCapacity}</p>
+                      </div>
+                      <Users className="h-10 w-10 text-purple-400" />
+                    </div>
+                  </div>
+
+                  {/* Vacancies */}
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200 w-full">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 mb-2 font-medium">Vacancies</p>
+                        <p className="text-4xl font-bold text-green-600">{hostelStats.remaining}</p>
+                      </div>
+                      <Users className="h-10 w-10 text-green-400" />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Loading statistics...</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

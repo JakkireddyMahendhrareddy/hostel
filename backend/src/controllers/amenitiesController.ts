@@ -32,6 +32,36 @@ export const getAmenities = async (req: Request, res: Response) => {
 };
 
 /**
+ * Get all active room amenities
+ * Used in room forms for selecting room amenities
+ */
+export const getRoomAmenities = async (req: Request, res: Response) => {
+  try {
+    const amenities = await db('room_amenities_master')
+      .select(
+        'amenity_id',
+        'amenity_name',
+        'amenity_icon',
+        'description',
+        'display_order'
+      )
+      .where({ is_active: 1 })
+      .orderBy('display_order', 'asc');
+
+    res.json({
+      success: true,
+      data: amenities
+    });
+  } catch (error) {
+    console.error('Get room amenities error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch room amenities'
+    });
+  }
+};
+
+/**
  * Create a new amenity (Admin only)
  */
 export const createAmenity = async (req: Request, res: Response) => {
