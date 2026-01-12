@@ -121,11 +121,11 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
     const expenses = Number(monthlyExpenses?.total || 0);
     const netProfit = income - expenses;
 
-    // Get pending dues count
-    let pendingDuesQuery = db('student_dues')
-      .where('is_paid', 0)
+    // Get pending dues count - count unpaid monthly fees
+    let pendingDuesQuery = db('monthly_fees')
+      .whereIn('fee_status', ['Pending', 'Partially Paid', 'Overdue'])
       .count('* as count')
-      .sum('balance_amount as total');
+      .sum('balance as total');
     if (hostelIds.length > 0) {
       pendingDuesQuery = pendingDuesQuery.whereIn('hostel_id', hostelIds);
     }

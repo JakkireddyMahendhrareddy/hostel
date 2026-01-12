@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, AlertCircle, Calendar, Edit2, Trash2, X } from "lucide-react";
+import { ArrowLeft, AlertCircle, Edit2, Trash2, X, ChevronUp, ChevronDown } from "lucide-react";
 import api from "../services/api";
 import toast from "react-hot-toast";
 
@@ -11,6 +11,7 @@ interface FeePayment {
   hostel_id: number;
   amount: number;
   payment_date: string;
+  due_date: string | null;
   payment_method: string;
   payment_mode_id: number | null;
   transaction_id: string | null;
@@ -32,23 +33,37 @@ interface PaymentMode {
 interface EditFormData {
   amount: string;
   payment_date: string;
+  due_date: string;
   payment_mode_id: string;
   receipt_number: string;
   transaction_id: string;
   notes: string;
 }
 
-const getTransactionTypeColor = (type: string) => {
-  switch (type) {
-    case "PAYMENT":
-      return "bg-green-100 text-green-800";
-    case "ADJUSTMENT":
-      return "bg-orange-100 text-orange-800";
-    case "REFUND":
-      return "bg-red-100 text-red-800";
-    default:
-      return "bg-gray-100 text-gray-800";
+// Helper to format date without timezone issues
+const formatPaymentDate = (dateStr: string): string => {
+  if (!dateStr) return "-";
+
+  let year: number, month: number, day: number;
+
+  if (dateStr.includes("T")) {
+    // ISO format with timezone - use LOCAL time to reverse server's UTC conversion
+    // Server converts "2026-01-12" (local) to "2026-01-11T18:30:00Z" (UTC)
+    // We need to convert back to local time to get the correct date
+    const date = new Date(dateStr);
+    year = date.getFullYear();
+    month = date.getMonth() + 1;
+    day = date.getDate();
+  } else if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+    // YYYY-MM-DD format - extract directly without Date conversion
+    [year, month, day] = dateStr.substring(0, 10).split("-").map(Number);
+  } else {
+    return "-";
   }
+
+  if (!year || !month || !day) return "-";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${String(day).padStart(2, "0")} ${months[month - 1]} ${year}`;
 };
 
 export const FeeDetailsPage: React.FC = () => {
@@ -60,6 +75,13 @@ export const FeeDetailsPage: React.FC = () => {
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10; // Show 10 payments per page
+
+  // Mobile card expanded state
+  const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
+
   // Edit modal state
   const [editModal, setEditModal] = useState({
     open: false,
@@ -68,6 +90,7 @@ export const FeeDetailsPage: React.FC = () => {
   const [editForm, setEditForm] = useState<EditFormData>({
     amount: "",
     payment_date: "",
+    due_date: "",
     payment_mode_id: "",
     receipt_number: "",
     transaction_id: "",
@@ -87,7 +110,7 @@ export const FeeDetailsPage: React.FC = () => {
 
   const fetchPaymentModes = async () => {
     try {
-      const response = await api.get("/payment-modes");
+      const response = await api.get("/fees/payment-modes");
       setPaymentModes(response.data.data || []);
     } catch (error) {
       console.error("Error fetching payment modes:", error);
@@ -147,10 +170,51 @@ export const FeeDetailsPage: React.FC = () => {
   };
 
   const handleEditOpen = (payment: FeePayment) => {
+    // Helper to normalize date to YYYY-MM-DD format
+    const normalizeDateString = (dateValue: string | null): string => {
+      if (!dateValue) return "";
+      if (dateValue.includes("T")) {
+        const date = new Date(dateValue);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      } else if (dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
+        return dateValue.substring(0, 10);
+      } else {
+        const date = new Date(dateValue);
+        if (!isNaN(date.getTime())) {
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, "0");
+          const day = String(date.getDate()).padStart(2, "0");
+          return `${year}-${month}-${day}`;
+        }
+      }
+      return "";
+    };
+
+    const dateString = normalizeDateString(payment.payment_date);
+    const dueDateString = normalizeDateString(payment.due_date);
+
+    // Determine payment_mode_id - use existing ID or find by payment_method name
+    let paymentModeId = "";
+    if (payment.payment_mode_id) {
+      paymentModeId = String(payment.payment_mode_id);
+    } else if (payment.payment_method) {
+      // Fallback: find payment mode by name if payment_mode_id is not set
+      const matchedMode = paymentModes.find(
+        (mode) => mode.payment_mode_name.toLowerCase() === payment.payment_method.toLowerCase()
+      );
+      if (matchedMode) {
+        paymentModeId = String(matchedMode.payment_mode_id);
+      }
+    }
+
     setEditForm({
       amount: payment.amount.toString(),
-      payment_date: payment.payment_date.split("T")[0],
-      payment_mode_id: payment.payment_mode_id?.toString() || "",
+      payment_date: dateString,
+      due_date: dueDateString,
+      payment_mode_id: paymentModeId,
       receipt_number: payment.receipt_number || "",
       transaction_id: payment.transaction_id || "",
       notes: payment.notes || "",
@@ -163,6 +227,7 @@ export const FeeDetailsPage: React.FC = () => {
     setEditForm({
       amount: "",
       payment_date: "",
+      due_date: "",
       payment_mode_id: "",
       receipt_number: "",
       transaction_id: "",
@@ -190,9 +255,10 @@ export const FeeDetailsPage: React.FC = () => {
 
     try {
       setEditLoading(true);
-      await api.put(`/monthly-fees/payments/${editModal.payment.payment_id}`, {
+      await api.put(`/monthly-fees/payment/${editModal.payment.payment_id}`, {
         amount: parseFloat(editForm.amount),
         payment_date: editForm.payment_date,
+        due_date: editForm.due_date || null,
         payment_mode_id: editForm.payment_mode_id
           ? parseInt(editForm.payment_mode_id)
           : null,
@@ -225,7 +291,7 @@ export const FeeDetailsPage: React.FC = () => {
 
     try {
       setDeleteLoading(true);
-      await api.delete(`/monthly-fees/payments/${deleteConfirm.paymentId}`);
+      await api.delete(`/monthly-fees/payment/${deleteConfirm.paymentId}`);
       toast.success("Payment deleted successfully");
       handleDeleteCancel();
       await fetchPaymentHistory();
@@ -339,109 +405,174 @@ export const FeeDetailsPage: React.FC = () => {
 
                       {/* Payments for this month */}
                       <div className="space-y-2">
-                        {monthPayments.map((payment) => (
-                          <div
-                            key={payment.payment_id}
-                            className={`p-4 rounded-lg border ${
-                              payment.transaction_type === "REFUND"
-                                ? "border-red-200 bg-red-50"
-                                : payment.transaction_type === "ADJUSTMENT"
-                                ? "border-orange-200 bg-orange-50"
-                                : "border-gray-200 bg-white"
-                            }`}
-                          >
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 flex-wrap mb-2">
-                                  <span
-                                    className={`font-semibold text-base ${
-                                      payment.amount < 0
-                                        ? "text-red-600"
-                                        : "text-green-600"
-                                    }`}
-                                  >
-                                    {payment.amount < 0 ? "-" : "+"}₹
-                                    {Math.abs(Math.floor(payment.amount)).toLocaleString(
-                                      "en-IN"
-                                    )}
-                                  </span>
-                                  <span
-                                    className={`px-2 py-1 text-xs font-medium rounded ${getTransactionTypeColor(
-                                      payment.transaction_type || "PAYMENT"
-                                    )}`}
-                                  >
-                                    {payment.transaction_type || "PAYMENT"}
-                                  </span>
-                                </div>
-
-                                {/* Action Buttons */}
-                                <div className="flex gap-2 mb-2">
-                                  <button
-                                    onClick={() => handleEditOpen(payment)}
-                                    className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition"
-                                  >
-                                    <Edit2 size={14} />
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteOpen(payment.payment_id)}
-                                    className="flex items-center gap-1 px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition"
-                                  >
-                                    <Trash2 size={14} />
-                                    Delete
-                                  </button>
-                                </div>
-
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                                    <Calendar size={14} />
-                                    <span>
-                                      {new Date(
-                                        payment.payment_date
-                                      ).toLocaleDateString("en-IN", {
-                                        day: "2-digit",
-                                        month: "short",
-                                        year: "numeric",
-                                      })}
+                        {monthPayments.map((payment) => {
+                          const isExpanded =
+                            expandedCardId === payment.payment_id;
+                          return (
+                            <div
+                              key={payment.payment_id}
+                              className={`bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-all ${
+                                isExpanded ? "shadow-lg" : ""
+                              }`}
+                            >
+                              <div className="p-4">
+                                {/* Collapsed View */}
+                                <div
+                                  className="flex items-center justify-between cursor-pointer"
+                                  onClick={() =>
+                                    setExpandedCardId(
+                                      isExpanded ? null : payment.payment_id
+                                    )
+                                  }
+                                >
+                                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <div className="flex-shrink-0">
+                                      {isExpanded ? (
+                                        <ChevronUp className="h-5 w-5 text-gray-400" />
+                                      ) : (
+                                        <ChevronDown className="h-5 w-5 text-gray-400" />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-base font-semibold text-gray-900">
+                                        {formatPaymentDate(payment.payment_date)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex-shrink-0">
+                                    <span
+                                      className={`text-base font-bold ${
+                                        payment.amount < 0
+                                          ? "text-red-600"
+                                          : "text-green-600"
+                                      }`}
+                                    >
+                                      {payment.amount < 0 ? "-" : "+"}₹
+                                      {Math.abs(Math.floor(payment.amount)).toLocaleString(
+                                        "en-IN"
+                                      )}
                                     </span>
                                   </div>
-
-                                  {payment.payment_method && (
-                                    <div className="text-sm text-gray-600">
-                                      <strong>Method:</strong> {payment.payment_method}
-                                    </div>
-                                  )}
-
-                                  {payment.receipt_number && (
-                                    <div className="text-sm text-gray-600">
-                                      <strong>Receipt:</strong> #{payment.receipt_number}
-                                    </div>
-                                  )}
-
-                                  {payment.transaction_id && (
-                                    <div className="text-sm text-gray-600">
-                                      <strong>Transaction ID:</strong> {payment.transaction_id}
-                                    </div>
-                                  )}
                                 </div>
+
+                                {/* Expanded View */}
+                                {isExpanded && (
+                                  <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+                                    <div className="space-y-2">
+                                      <div>
+                                        <p className="text-xs text-gray-500 mb-1">Date</p>
+                                        <p className="text-sm font-medium text-gray-900">
+                                          {formatPaymentDate(payment.payment_date)}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-gray-500 mb-1">Amount</p>
+                                        <p
+                                          className={`text-sm font-medium ${
+                                            payment.amount < 0
+                                              ? "text-red-600"
+                                              : "text-green-600"
+                                          }`}
+                                        >
+                                          {payment.amount < 0 ? "-" : "+"}₹
+                                          {Math.abs(
+                                            Math.floor(payment.amount)
+                                          ).toLocaleString("en-IN")}
+                                        </p>
+                                      </div>
+                                      {payment.due_date && (
+                                        <div>
+                                          <p className="text-xs text-gray-500 mb-1">
+                                            Due Date
+                                          </p>
+                                          <p className="text-sm font-medium text-gray-900">
+                                            {formatPaymentDate(payment.due_date)}
+                                          </p>
+                                        </div>
+                                      )}
+                                      {payment.payment_method && (
+                                        <div>
+                                          <p className="text-xs text-gray-500 mb-1">
+                                            Method
+                                          </p>
+                                          <p className="text-sm font-medium text-gray-900">
+                                            {payment.payment_method}
+                                          </p>
+                                        </div>
+                                      )}
+                                      {payment.receipt_number && (
+                                        <div>
+                                          <p className="text-xs text-gray-500 mb-1">
+                                            Receipt
+                                          </p>
+                                          <p className="text-sm font-medium text-gray-900">
+                                            #{payment.receipt_number}
+                                          </p>
+                                        </div>
+                                      )}
+                                      {payment.transaction_id && (
+                                        <div>
+                                          <p className="text-xs text-gray-500 mb-1">
+                                            Transaction ID
+                                          </p>
+                                          <p className="text-sm font-medium text-gray-900 truncate">
+                                            {payment.transaction_id}
+                                          </p>
+                                        </div>
+                                      )}
+                                      {payment.notes && (
+                                        <div>
+                                          <p className="text-xs text-gray-500 mb-1">
+                                            Notes
+                                          </p>
+                                          <p className="text-sm font-medium text-gray-900">
+                                            {payment.notes}
+                                          </p>
+                                        </div>
+                                      )}
+                                      {payment.reason && (
+                                        <div>
+                                          <p className="text-xs text-gray-500 mb-1">
+                                            Reason
+                                          </p>
+                                          <p className="text-sm font-medium text-gray-900">
+                                            {payment.reason}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setExpandedCardId(null);
+                                          handleEditOpen(payment);
+                                        }}
+                                        className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                                        title="Edit Payment"
+                                      >
+                                        <Edit2 className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setExpandedCardId(null);
+                                          handleDeleteOpen(payment.payment_id);
+                                        }}
+                                        className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                                        title="Delete Payment"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
-
-                            {payment.reason && (
-                              <div className="mt-3 pt-3 border-t border-orange-200 text-sm">
-                                <p className="text-orange-700">
-                                  <strong>Reason:</strong> {payment.reason}
-                                </p>
-                              </div>
-                            )}
-
-                            {payment.notes && (
-                              <div className="mt-2 text-sm text-gray-600">
-                                <p><strong>Notes:</strong> {payment.notes}</p>
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -455,9 +586,10 @@ export const FeeDetailsPage: React.FC = () => {
                 <table className="w-full">
                   <thead className="bg-primary-600">
                     <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">S.NO</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Due Date</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-white uppercase tracking-wider">Amount</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Type</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Method</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Receipt #</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Transaction ID</th>
@@ -466,71 +598,124 @@ export const FeeDetailsPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {payments.map((payment) => (
-                      <tr key={payment.payment_id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3 text-sm text-gray-800">
-                          {new Date(payment.payment_date).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-right">
-                          <span
-                            className={
-                              payment.amount < 0 ? "text-red-600" : "text-green-600"
-                            }
-                          >
-                            {payment.amount < 0 ? "-" : "+"}₹
-                            {Math.abs(Math.floor(payment.amount)).toLocaleString(
-                              "en-IN"
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <span
-                            className={`inline-block px-2.5 py-1 text-xs font-medium rounded ${getTransactionTypeColor(
-                              payment.transaction_type || "PAYMENT"
-                            )}`}
-                          >
-                            {payment.transaction_type || "PAYMENT"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          {payment.payment_method || "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          {payment.receipt_number ? `#${payment.receipt_number}` : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
-                          {payment.transaction_id || "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
-                          {payment.notes || "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => handleEditOpen(payment)}
-                              className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
-                              title="Edit payment"
+                    {(() => {
+                      const startIndex = (currentPage - 1) * itemsPerPage;
+                      const endIndex = startIndex + itemsPerPage;
+                      const paginatedPayments = payments.slice(startIndex, endIndex);
+                      return paginatedPayments.map((payment, index) => (
+                        <tr key={payment.payment_id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                            {startIndex + index + 1}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-800">
+                            {formatPaymentDate(payment.payment_date)}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-800">
+                            {payment.due_date ? formatPaymentDate(payment.due_date) : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right">
+                            <span
+                              className={
+                                payment.amount < 0 ? "text-red-600" : "text-green-600"
+                              }
                             >
-                              <Edit2 size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteOpen(payment.payment_id)}
-                              className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
-                              title="Delete payment"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                              {payment.amount < 0 ? "-" : "+"}₹
+                              {Math.abs(Math.floor(payment.amount)).toLocaleString(
+                                "en-IN"
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            {payment.payment_method || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            {payment.receipt_number ? `#${payment.receipt_number}` : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+                            {payment.transaction_id || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+                            {payment.notes || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => handleEditOpen(payment)}
+                                className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
+                                title="Edit payment"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteOpen(payment.payment_id)}
+                                className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
+                                title="Delete payment"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
                   </tbody>
                 </table>
-              </div>
+
+              {/* Pagination Footer */}
+              {payments.length > 0 && (
+                <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    Showing <span className="font-medium">
+                      {(currentPage - 1) * itemsPerPage + 1}-
+                      {Math.min(currentPage * itemsPerPage, payments.length)}
+                    </span> of <span className="font-medium">{payments.length}</span> payments
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                      Previous
+                    </button>
+                    <div className="flex items-center gap-1">
+                      {Array.from(
+                        {
+                          length: Math.ceil(payments.length / itemsPerPage),
+                        },
+                        (_, i) => i + 1
+                      ).map((page) => (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`px-2.5 py-1 text-sm rounded-lg transition ${
+                            currentPage === page
+                              ? "bg-primary-600 text-white font-medium"
+                              : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((prev) =>
+                          Math.min(
+                            prev + 1,
+                            Math.ceil(payments.length / itemsPerPage)
+                          )
+                        )
+                      }
+                      disabled={currentPage === Math.ceil(payments.length / itemsPerPage)}
+                      className="px-3 py-1 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             </div>
           </>
         ) : (
@@ -557,9 +742,10 @@ export const FeeDetailsPage: React.FC = () => {
             </div>
 
             {/* Modal Content */}
-            <div className="px-6 py-4 space-y-3">
-              {/* Row 1: Amount and Payment Date */}
-              <div className="grid grid-cols-2 gap-4">
+            <div className="px-4 md:px-6 py-4 space-y-3">
+              {/* Row 1: Amount, Payment Date, Due Date */}
+              {/* Mobile: 1 col, Desktop: 3 cols */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                 {/* Amount */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -589,10 +775,25 @@ export const FeeDetailsPage: React.FC = () => {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
+
+                {/* Due Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Due Date
+                  </label>
+                  <input
+                    type="date"
+                    name="due_date"
+                    value={editForm.due_date}
+                    onChange={handleEditFormChange}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
               </div>
 
-              {/* Row 2: Payment Mode and Receipt Number */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Row 2: Payment Mode, Receipt Number, Transaction ID */}
+              {/* Mobile: 1 col, Desktop: 3 cols */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                 {/* Payment Mode */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -606,7 +807,7 @@ export const FeeDetailsPage: React.FC = () => {
                   >
                     <option value="">Select payment mode</option>
                     {paymentModes.map((mode) => (
-                      <option key={mode.payment_mode_id} value={mode.payment_mode_id}>
+                      <option key={mode.payment_mode_id} value={String(mode.payment_mode_id)}>
                         {mode.payment_mode_name}
                       </option>
                     ))}
@@ -627,24 +828,24 @@ export const FeeDetailsPage: React.FC = () => {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
+
+                {/* Transaction ID */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Transaction ID
+                  </label>
+                  <input
+                    type="text"
+                    name="transaction_id"
+                    value={editForm.transaction_id}
+                    onChange={handleEditFormChange}
+                    placeholder="TXN123456"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
               </div>
 
-              {/* Row 3: Transaction ID (Full Width) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Transaction ID
-                </label>
-                <input
-                  type="text"
-                  name="transaction_id"
-                  value={editForm.transaction_id}
-                  onChange={handleEditFormChange}
-                  placeholder="TXN123456"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              {/* Row 4: Notes (Full Width) */}
+              {/* Row 3: Notes (Full Width) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Notes
