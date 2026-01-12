@@ -11,6 +11,7 @@ interface FeePayment {
   hostel_id: number;
   amount: number;
   payment_date: string;
+  due_date: string | null;
   payment_method: string;
   payment_mode_id: number | null;
   transaction_id: string | null;
@@ -32,6 +33,7 @@ interface PaymentMode {
 interface EditFormData {
   amount: string;
   payment_date: string;
+  due_date: string;
   payment_mode_id: string;
   receipt_number: string;
   transaction_id: string;
@@ -88,6 +90,7 @@ export const FeeDetailsPage: React.FC = () => {
   const [editForm, setEditForm] = useState<EditFormData>({
     amount: "",
     payment_date: "",
+    due_date: "",
     payment_mode_id: "",
     receipt_number: "",
     transaction_id: "",
@@ -167,33 +170,31 @@ export const FeeDetailsPage: React.FC = () => {
   };
 
   const handleEditOpen = (payment: FeePayment) => {
-    // Extract and normalize date to YYYY-MM-DD format for input[type="date"]
-    let dateString = "";
-
-    if (payment.payment_date) {
-      // Handle ISO format with timezone - use LOCAL time to reverse server's UTC conversion
-      if (payment.payment_date.includes("T")) {
-        const date = new Date(payment.payment_date);
+    // Helper to normalize date to YYYY-MM-DD format
+    const normalizeDateString = (dateValue: string | null): string => {
+      if (!dateValue) return "";
+      if (dateValue.includes("T")) {
+        const date = new Date(dateValue);
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, "0");
         const day = String(date.getDate()).padStart(2, "0");
-        dateString = `${year}-${month}-${day}`;
-      }
-      // Handle YYYY-MM-DD format directly (no timezone conversion needed)
-      else if (payment.payment_date.match(/^\d{4}-\d{2}-\d{2}/)) {
-        dateString = payment.payment_date.substring(0, 10);
-      }
-      // Fallback
-      else {
-        const date = new Date(payment.payment_date);
+        return `${year}-${month}-${day}`;
+      } else if (dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
+        return dateValue.substring(0, 10);
+      } else {
+        const date = new Date(dateValue);
         if (!isNaN(date.getTime())) {
           const year = date.getFullYear();
           const month = String(date.getMonth() + 1).padStart(2, "0");
           const day = String(date.getDate()).padStart(2, "0");
-          dateString = `${year}-${month}-${day}`;
+          return `${year}-${month}-${day}`;
         }
       }
-    }
+      return "";
+    };
+
+    const dateString = normalizeDateString(payment.payment_date);
+    const dueDateString = normalizeDateString(payment.due_date);
 
     // Determine payment_mode_id - use existing ID or find by payment_method name
     let paymentModeId = "";
@@ -212,6 +213,7 @@ export const FeeDetailsPage: React.FC = () => {
     setEditForm({
       amount: payment.amount.toString(),
       payment_date: dateString,
+      due_date: dueDateString,
       payment_mode_id: paymentModeId,
       receipt_number: payment.receipt_number || "",
       transaction_id: payment.transaction_id || "",
@@ -225,6 +227,7 @@ export const FeeDetailsPage: React.FC = () => {
     setEditForm({
       amount: "",
       payment_date: "",
+      due_date: "",
       payment_mode_id: "",
       receipt_number: "",
       transaction_id: "",
@@ -255,6 +258,7 @@ export const FeeDetailsPage: React.FC = () => {
       await api.put(`/monthly-fees/payment/${editModal.payment.payment_id}`, {
         amount: parseFloat(editForm.amount),
         payment_date: editForm.payment_date,
+        due_date: editForm.due_date || null,
         payment_mode_id: editForm.payment_mode_id
           ? parseInt(editForm.payment_mode_id)
           : null,
@@ -476,6 +480,16 @@ export const FeeDetailsPage: React.FC = () => {
                                           ).toLocaleString("en-IN")}
                                         </p>
                                       </div>
+                                      {payment.due_date && (
+                                        <div>
+                                          <p className="text-xs text-gray-500 mb-1">
+                                            Due Date
+                                          </p>
+                                          <p className="text-sm font-medium text-gray-900">
+                                            {formatPaymentDate(payment.due_date)}
+                                          </p>
+                                        </div>
+                                      )}
                                       {payment.payment_method && (
                                         <div>
                                           <p className="text-xs text-gray-500 mb-1">
@@ -574,6 +588,7 @@ export const FeeDetailsPage: React.FC = () => {
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">S.NO</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Due Date</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-white uppercase tracking-wider">Amount</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Method</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Receipt #</th>
@@ -592,51 +607,54 @@ export const FeeDetailsPage: React.FC = () => {
                           <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
                             {startIndex + index + 1}
                           </td>
-                        <td className="px-4 py-3 text-sm text-gray-800">
-                          {formatPaymentDate(payment.payment_date)}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-right">
-                          <span
-                            className={
-                              payment.amount < 0 ? "text-red-600" : "text-green-600"
-                            }
-                          >
-                            {payment.amount < 0 ? "-" : "+"}₹
-                            {Math.abs(Math.floor(payment.amount)).toLocaleString(
-                              "en-IN"
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          {payment.payment_method || "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          {payment.receipt_number ? `#${payment.receipt_number}` : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
-                          {payment.transaction_id || "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
-                          {payment.notes || "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => handleEditOpen(payment)}
-                              className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
-                              title="Edit payment"
+                          <td className="px-4 py-3 text-sm text-gray-800">
+                            {formatPaymentDate(payment.payment_date)}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-800">
+                            {payment.due_date ? formatPaymentDate(payment.due_date) : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right">
+                            <span
+                              className={
+                                payment.amount < 0 ? "text-red-600" : "text-green-600"
+                              }
                             >
-                              <Edit2 size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteOpen(payment.payment_id)}
-                              className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
-                              title="Delete payment"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
+                              {payment.amount < 0 ? "-" : "+"}₹
+                              {Math.abs(Math.floor(payment.amount)).toLocaleString(
+                                "en-IN"
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            {payment.payment_method || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            {payment.receipt_number ? `#${payment.receipt_number}` : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+                            {payment.transaction_id || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+                            {payment.notes || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => handleEditOpen(payment)}
+                                className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
+                                title="Edit payment"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteOpen(payment.payment_id)}
+                                className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
+                                title="Delete payment"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ));
                     })()}
@@ -724,9 +742,10 @@ export const FeeDetailsPage: React.FC = () => {
             </div>
 
             {/* Modal Content */}
-            <div className="px-6 py-4 space-y-3">
-              {/* Row 1: Amount and Payment Date */}
-              <div className="grid grid-cols-2 gap-4">
+            <div className="px-4 md:px-6 py-4 space-y-3">
+              {/* Row 1: Amount, Payment Date, Due Date */}
+              {/* Mobile: 1 col, Desktop: 3 cols */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                 {/* Amount */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -756,10 +775,25 @@ export const FeeDetailsPage: React.FC = () => {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
+
+                {/* Due Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Due Date
+                  </label>
+                  <input
+                    type="date"
+                    name="due_date"
+                    value={editForm.due_date}
+                    onChange={handleEditFormChange}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
               </div>
 
-              {/* Row 2: Payment Mode and Receipt Number */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Row 2: Payment Mode, Receipt Number, Transaction ID */}
+              {/* Mobile: 1 col, Desktop: 3 cols */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                 {/* Payment Mode */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -794,24 +828,24 @@ export const FeeDetailsPage: React.FC = () => {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
+
+                {/* Transaction ID */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Transaction ID
+                  </label>
+                  <input
+                    type="text"
+                    name="transaction_id"
+                    value={editForm.transaction_id}
+                    onChange={handleEditFormChange}
+                    placeholder="TXN123456"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
               </div>
 
-              {/* Row 3: Transaction ID (Full Width) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Transaction ID
-                </label>
-                <input
-                  type="text"
-                  name="transaction_id"
-                  value={editForm.transaction_id}
-                  onChange={handleEditFormChange}
-                  placeholder="TXN123456"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              {/* Row 4: Notes (Full Width) */}
+              {/* Row 3: Notes (Full Width) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Notes

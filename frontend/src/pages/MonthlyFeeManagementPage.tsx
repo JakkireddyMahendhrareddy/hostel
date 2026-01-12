@@ -435,15 +435,10 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     );
   }
 
-  // Helper function to calculate due date
-  const calculateDueDate = (fee: MonthlyFee): Date | null => {
-    if (!fee.admission_date || !fee.fee_month) return null;
-    const admissionDate = new Date(fee.admission_date);
-    const admissionDay = admissionDate.getDate();
-    const dueDay = admissionDay - 1;
-    if (dueDay < 1) return null;
-    const [year, month] = fee.fee_month.split("-").map(Number);
-    return new Date(year, month - 1, dueDay);
+  // Helper function to get due date from stored value
+  const getDueDate = (fee: MonthlyFee): Date | null => {
+    if (!fee.due_date) return null;
+    return new Date(fee.due_date);
   };
 
   // Helper function to convert date string to Date object
@@ -490,7 +485,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
 
       // Apply date range filter by due date
       if (dateFilterStartDate && dateFilterEndDate) {
-        const dueDate = calculateDueDate(fee);
+        const dueDate = getDueDate(fee);
         if (!dueDate) return false;
 
         const startDate = dateStringToDate(dateFilterStartDate);
@@ -503,8 +498,8 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     })
     .sort((a, b) => {
       // Sort by due date
-      const dueDateA = calculateDueDate(a);
-      const dueDateB = calculateDueDate(b);
+      const dueDateA = getDueDate(a);
+      const dueDateB = getDueDate(b);
 
       if (!dueDateA && !dueDateB) return 0;
       if (!dueDateA) return 1;
@@ -752,20 +747,13 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                         <div>
                           <p className="text-xs text-gray-500 mb-1">Due Date</p>
                           <p className="text-sm font-medium text-gray-900">
-                            {(() => {
-                              if (!fee.admission_date || !fee.fee_month) return "-";
-                              const admissionDate = new Date(fee.admission_date);
-                              const admissionDay = admissionDate.getDate();
-                              const dueDay = admissionDay - 1;
-                              if (dueDay < 1) return "-";
-                              const [year, month] = fee.fee_month.split("-").map(Number);
-                              const dueDate = new Date(year, month - 1, dueDay);
-                              return dueDate.toLocaleDateString("en-IN", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              });
-                            })()}
+                            {fee.due_date
+                              ? new Date(fee.due_date).toLocaleDateString("en-IN", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : "-"}
                           </p>
                         </div>
                         <div>
@@ -923,22 +911,13 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                       : "-"}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                    {(() => {
-                      if (!fee.admission_date || !fee.fee_month) return "-";
-                      const admissionDate = new Date(fee.admission_date);
-                      const admissionDay = admissionDate.getDate();
-                      const dueDay = admissionDay - 1;
-                      if (dueDay < 1) return "-";
-                      const [year, month] = fee.fee_month
-                        .split("-")
-                        .map(Number);
-                      const dueDate = new Date(year, month - 1, dueDay);
-                      return dueDate.toLocaleDateString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      });
-                    })()}
+                    {fee.due_date
+                      ? new Date(fee.due_date).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : "-"}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                     {fee.room_number || "-"}
@@ -1061,11 +1040,12 @@ export const MonthlyFeeManagementPage: React.FC = () => {
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         title={`Record Payment - ${selectedFee?.first_name} ${selectedFee?.last_name}`}
+        size="lg"
       >
-        <div className="space-y-4 mb-6">
+        <div className="space-y-4 md:space-y-3">
           {/* Balance Info */}
           {selectedFee && (
-            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+            <div className="bg-gray-50 rounded-lg p-3 md:p-2 border border-gray-200">
               <div className="grid grid-cols-3 gap-4 text-sm">
                 <div>
                   <span className="text-gray-500">Total Due:</span>
@@ -1095,9 +1075,11 @@ export const MonthlyFeeManagementPage: React.FC = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          {/* Row 1: Amount, Payment Date, Due Date, Payment Mode */}
+          {/* Mobile: 2 cols, Desktop: 4 cols */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm md:text-xs font-medium text-gray-700 mb-1">
                 Amount <span className="text-red-500">*</span>
               </label>
               <input
@@ -1107,12 +1089,12 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                   setPaymentForm({ ...paymentForm, amount: e.target.value })
                 }
                 placeholder="Enter amount"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 md:px-3 py-2 md:py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 step="1"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm md:text-xs font-medium text-gray-700 mb-1">
                 Payment Date
               </label>
               <input
@@ -1124,15 +1106,12 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                     payment_date: e.target.value,
                   })
                 }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 md:px-3 py-2 md:py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Due Date <span className="text-red-500">*</span>
+              <label className="block text-sm md:text-xs font-medium text-gray-700 mb-1">
+                Next Due Date <span className="text-red-500">*</span>
               </label>
               <input
                 type="date"
@@ -1143,14 +1122,11 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                     due_date: e.target.value,
                   })
                 }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 md:px-3 py-2 md:py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                End date of current billing cycle
-              </p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm md:text-xs font-medium text-gray-700 mb-1">
                 Payment Mode <span className="text-red-500">*</span>
               </label>
               <select
@@ -1161,10 +1137,10 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                     payment_mode_id: e.target.value,
                   })
                 }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 md:px-3 py-2 md:py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 required
               >
-                <option value="">Select Payment Mode</option>
+                <option value="">Select Mode</option>
                 {paymentModes.map((mode) => (
                   <option
                     key={mode.payment_mode_id}
@@ -1175,8 +1151,13 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Row 2: Receipt Number, Transaction ID, Notes */}
+          {/* Mobile: 1 col, Desktop: 3 cols */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm md:text-xs font-medium text-gray-700 mb-1">
                 Receipt Number (Optional)
               </label>
               <input
@@ -1189,55 +1170,54 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                   })
                 }
                 placeholder="RCP001"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 md:px-3 py-2 md:py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm md:text-xs font-medium text-gray-700 mb-1">
+                Transaction ID (Optional)
+              </label>
+              <input
+                type="text"
+                value={paymentForm.transaction_id}
+                onChange={(e) =>
+                  setPaymentForm({
+                    ...paymentForm,
+                    transaction_id: e.target.value,
+                  })
+                }
+                placeholder="TXN123456"
+                className="w-full px-4 md:px-3 py-2 md:py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm md:text-xs font-medium text-gray-700 mb-1">
+                Notes (Optional)
+              </label>
+              <input
+                type="text"
+                value={paymentForm.notes}
+                onChange={(e) =>
+                  setPaymentForm({ ...paymentForm, notes: e.target.value })
+                }
+                placeholder="Add any notes..."
+                className="w-full px-4 md:px-3 py-2 md:py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Transaction ID (Optional)
-            </label>
-            <input
-              type="text"
-              value={paymentForm.transaction_id}
-              onChange={(e) =>
-                setPaymentForm({
-                  ...paymentForm,
-                  transaction_id: e.target.value,
-                })
-              }
-              placeholder="TXN123456"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
+          {/* Buttons */}
+          <div className="flex justify-end gap-4 md:gap-3 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => setShowPaymentModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleRecordPayment}>
+              Record Payment
+            </Button>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notes (Optional)
-            </label>
-            <textarea
-              value={paymentForm.notes}
-              onChange={(e) =>
-                setPaymentForm({ ...paymentForm, notes: e.target.value })
-              }
-              placeholder="Add any notes..."
-              rows={2}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-4">
-          <Button
-            variant="secondary"
-            onClick={() => setShowPaymentModal(false)}
-          >
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={handleRecordPayment}>
-            Record Payment
-          </Button>
         </div>
       </Modal>
 

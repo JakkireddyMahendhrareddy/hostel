@@ -659,6 +659,7 @@ export const getStudentAllPayments = async (req: AuthRequest, res: Response) => 
         'fp.hostel_id',
         'fp.amount',
         'fp.payment_date',
+        'fp.due_date',
         'fp.payment_mode_id',
         'fp.transaction_id',
         'fp.receipt_number',
@@ -690,7 +691,7 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
   console.log('[recordPayment] Body:', req.body);
   console.log('[recordPayment] Params:', req.params);
   console.log('[recordPayment] User:', req.user);
-  
+
   try {
     const {
       fee_id,
@@ -706,10 +707,10 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
     } = req.body;
 
     // Validate required fields (fee_id is optional if we need to create fee record)
-    if (!student_id || !hostel_id || !amount || !payment_date) {
+    if (!student_id || !hostel_id || !amount || !payment_date || !due_date) {
       return res.status(400).json({
         success: false,
-        error: 'Required fields: student_id, hostel_id, amount, payment_date'
+        error: 'Required fields: student_id, hostel_id, amount, payment_date, due_date'
       });
     }
 
@@ -748,6 +749,15 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
     const [year, month] = feeMonth.split('-');
     const feeDate = parseInt(month);
 
+    // Parse the user-entered due_date
+    let userDueDate: Date;
+    if (typeof due_date === 'string' && due_date.match(/^\d{4}-\d{2}-\d{2}/)) {
+      const [dYear, dMonth, dDay] = due_date.substring(0, 10).split('-').map(Number);
+      userDueDate = new Date(dYear, dMonth - 1, dDay);
+    } else {
+      userDueDate = new Date(due_date);
+    }
+
     // Get or create the monthly fee record
     let monthlyFee = null;
     let actualFeeId = fee_id;
@@ -763,7 +773,7 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
     // If fee record doesn't exist, create it
     if (!monthlyFee) {
       console.log('[recordPayment] Fee record does not exist, creating new one');
-      
+
       // Check if fee already exists for this month
       const existingFee = await db('monthly_fees')
         .where({
@@ -780,12 +790,11 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
         // This ensures we only carry forward unpaid balance, not total due
         const prevMonthDate = new Date(parseInt(year), parseInt(month) - 2, 1);
         const prevMonth = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
-        
+
         const carryForward = await getPreviousMonthBalance(student_id, prevMonth);
         const monthlyRent = parseFloat(student.monthly_rent || 0);
         const totalDue = monthlyRent + carryForward;
-        const dueDate = new Date(parseInt(year), parseInt(month) - 1, 15);
-        
+
         const [newFeeId] = await db('monthly_fees').insert({
           student_id,
           hostel_id,
@@ -797,7 +806,7 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
           paid_amount: 0.00,
           balance: totalDue,
           fee_status: 'Pending',
-          due_date: dueDate,
+          due_date: userDueDate,
           notes: 'Auto-created when payment recorded',
           created_at: new Date(),
           updated_at: new Date()
@@ -806,7 +815,7 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
         monthlyFee = await db('monthly_fees')
           .where('fee_id', newFeeId)
           .first();
-        
+
         actualFeeId = newFeeId;
         console.log('[recordPayment] Created new fee record with fee_id:', actualFeeId);
       }
@@ -835,7 +844,7 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
     const existingPayments = await db('fee_payments')
       .where('fee_id', actualFeeId)
       .sum('amount as total');
-    
+
     const currentTotalPaid = parseFloat(existingPayments[0]?.total || 0);
     const newTotalPaid = currentTotalPaid + paymentAmount;
     const totalDue = parseFloat(monthlyFee.total_due || 0);
@@ -870,12 +879,24 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
         paymentDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       }
 
+      // Format due_date for fee_payments storage
+      let dueDateStr: string | null = null;
+      if (due_date) {
+        if (typeof due_date === 'string' && due_date.match(/^\d{4}-\d{2}-\d{2}/)) {
+          dueDateStr = due_date.substring(0, 10);
+        } else {
+          const dDate = new Date(due_date);
+          dueDateStr = `${dDate.getFullYear()}-${String(dDate.getMonth() + 1).padStart(2, '0')}-${String(dDate.getDate()).padStart(2, '0')}`;
+        }
+      }
+
       const paymentData: any = {
         fee_id: actualFeeId,
         student_id,
         hostel_id,
         amount: paymentAmount,
         payment_date: paymentDateStr,
+        due_date: dueDateStr,
         payment_mode_id: payment_mode_id || null,
         transaction_id: transaction_id || null,
         receipt_number: receipt_number || null,
@@ -886,13 +907,14 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
 
       const [paymentId] = await trx('fee_payments').insert(paymentData);
 
-      // Update monthly_fees record with recalculated values
+      // Update monthly_fees record with recalculated values AND user-entered due_date
       await trx('monthly_fees')
         .where('fee_id', actualFeeId)
         .update({
           paid_amount: newTotalPaid,
           balance: newBalance,
           fee_status: newFeeStatus,
+          due_date: userDueDate,
           updated_at: new Date()
         });
 
@@ -914,6 +936,55 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
         created_by: user?.user_id || null,
         created_at: new Date()
       });
+
+      // If FULLY PAID, create next month's fee record with due_date (same day, next month)
+      if (newFeeStatus === 'Fully Paid') {
+        const nextMonthDate = new Date(parseInt(year), parseInt(month), 1); // Next month
+        const nextFeeMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`;
+
+        // Check if next month's fee already exists
+        const existingNextMonthFee = await trx('monthly_fees')
+          .where({
+            student_id,
+            fee_month: nextFeeMonth
+          })
+          .first();
+
+        if (!existingNextMonthFee) {
+          // Calculate next month's due date (same day as user-entered due_date)
+          const dueDateDay = userDueDate.getDate();
+          const nextMonthYear = nextMonthDate.getFullYear();
+          const nextMonthNum = nextMonthDate.getMonth();
+
+          // Handle edge case: if due_date day doesn't exist in next month (e.g., 31 in Feb)
+          let nextDueDate = new Date(nextMonthYear, nextMonthNum, dueDateDay);
+          if (nextDueDate.getDate() !== dueDateDay) {
+            // Day doesn't exist in this month, use last day of month
+            nextDueDate = new Date(nextMonthYear, nextMonthNum + 1, 0);
+          }
+
+          const nextMonthlyRent = parseFloat(student.monthly_rent || 0);
+
+          await trx('monthly_fees').insert({
+            student_id,
+            hostel_id,
+            fee_month: nextFeeMonth,
+            fee_date: nextMonthDate.getMonth() + 1,
+            monthly_rent: nextMonthlyRent,
+            carry_forward: 0, // Fully paid, no carry forward
+            total_due: nextMonthlyRent,
+            paid_amount: 0.00,
+            balance: nextMonthlyRent,
+            fee_status: 'Pending',
+            due_date: nextDueDate,
+            notes: 'Auto-created after full payment',
+            created_at: new Date(),
+            updated_at: new Date()
+          });
+
+          console.log(`[recordPayment] Created next month fee record for ${nextFeeMonth} with due_date: ${nextDueDate}`);
+        }
+      }
 
       await trx.commit();
 
@@ -1622,6 +1693,7 @@ export const updatePayment = async (req: AuthRequest, res: Response) => {
     const {
       amount,
       payment_date,
+      due_date,
       payment_mode_id,
       receipt_number,
       transaction_id,
@@ -1683,12 +1755,24 @@ export const updatePayment = async (req: AuthRequest, res: Response) => {
     const feeId = currentPayment.fee_id;
     const oldAmount = currentPayment.amount;
 
+    // Format due_date for storage
+    let dueDateStr: string | null = null;
+    if (due_date) {
+      if (typeof due_date === 'string' && due_date.match(/^\d{4}-\d{2}-\d{2}/)) {
+        dueDateStr = due_date.substring(0, 10);
+      } else {
+        const dDate = new Date(due_date);
+        dueDateStr = `${dDate.getFullYear()}-${String(dDate.getMonth() + 1).padStart(2, '0')}-${String(dDate.getDate()).padStart(2, '0')}`;
+      }
+    }
+
     // Update payment record
     await db('fee_payments')
       .where('payment_id', paymentIdNum)
       .update({
         amount: parsedAmount,
         payment_date: payment_date,
+        due_date: dueDateStr,
         payment_mode_id: parseInt(payment_mode_id, 10),
         receipt_number: receipt_number || null,
         transaction_id: transaction_id || null,
@@ -1721,15 +1805,22 @@ export const updatePayment = async (req: AuthRequest, res: Response) => {
           newFeeStatus = 'Partially Paid';
         }
 
-        // Update monthly_fees with new totals
+        // Update monthly_fees with new totals and due_date
+        const updateData: any = {
+          paid_amount: totalPaid,
+          balance: newBalance,
+          fee_status: newFeeStatus,
+          updated_at: new Date()
+        };
+
+        // Also update due_date in monthly_fees if provided
+        if (dueDateStr) {
+          updateData.due_date = dueDateStr;
+        }
+
         await db('monthly_fees')
           .where('fee_id', feeId)
-          .update({
-            paid_amount: totalPaid,
-            balance: newBalance,
-            fee_status: newFeeStatus,
-            updated_at: new Date()
-          });
+          .update(updateData);
       }
     }
 
@@ -1743,6 +1834,7 @@ export const updatePayment = async (req: AuthRequest, res: Response) => {
         'fee_payments.hostel_id',
         'fee_payments.amount',
         'fee_payments.payment_date',
+        'fee_payments.due_date',
         'fee_payments.payment_mode_id',
         'fee_payments.transaction_id',
         'fee_payments.receipt_number',

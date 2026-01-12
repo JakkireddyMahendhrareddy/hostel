@@ -129,16 +129,31 @@ const generateMonthlyFeesForHostel = async (hostel_id: number, fee_month: string
           feeStatus = 'Fully Paid'; // Unlikely but handle edge case
         }
 
-        // Get student's due_date_day from students table
-        const studentRecord = await db('students')
-          .where('student_id', student.student_id)
-          .first();
-        const studentDueDateDay = studentRecord?.due_date_day || dueDateDay;
+        // Step 5: Calculate due date based on PREVIOUS month's due_date
+        // Rule: Use the same day from previous month's due_date for this month
+        let studentDueDate: Date;
 
-        // Create/calculate student specific due date
-        let studentDueDate = new Date(parseInt(year), parseInt(month) - 1, studentDueDateDay);
-        if (studentDueDate.getDate() !== studentDueDateDay) {
-          studentDueDate = new Date(parseInt(year), parseInt(month), 0);
+        if (prevMonthFee && prevMonthFee.due_date) {
+          // Use previous month's due_date day for this month
+          const prevDueDate = new Date(prevMonthFee.due_date);
+          const dueDateDay = prevDueDate.getDate();
+
+          // Create due date for current fee month with same day
+          studentDueDate = new Date(parseInt(year), parseInt(month) - 1, dueDateDay);
+
+          // Handle edge case: if due_date day doesn't exist in this month (e.g., 31 in Feb)
+          if (studentDueDate.getDate() !== dueDateDay) {
+            studentDueDate = new Date(parseInt(year), parseInt(month), 0); // Last day of month
+          }
+
+          console.log(`[Monthly Fees Cron] Student ${student.student_id}: Using prev month due_date day ${dueDateDay} -> ${studentDueDate}`);
+        } else {
+          // No previous month fee, use hostel default or 15th
+          studentDueDate = new Date(parseInt(year), parseInt(month) - 1, dueDateDay);
+          if (studentDueDate.getDate() !== dueDateDay) {
+            studentDueDate = new Date(parseInt(year), parseInt(month), 0);
+          }
+          console.log(`[Monthly Fees Cron] Student ${student.student_id}: No prev fee, using default day ${dueDateDay} -> ${studentDueDate}`);
         }
 
         // Create fee record
