@@ -28,8 +28,9 @@ export const authService = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     const response = await api.post<AuthResponse>('/auth/login', credentials);
     if (response.data.success) {
-      localStorage.setItem('authToken', response.data.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.data.user));
+      // Use sessionStorage for tab-independent sessions
+      sessionStorage.setItem('authToken', response.data.data.token);
+      sessionStorage.setItem('user', JSON.stringify(response.data.data.user));
     }
     return response.data;
   },
@@ -38,8 +39,8 @@ export const authService = {
     try {
       await api.post('/auth/logout');
     } finally {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
+      sessionStorage.removeItem('authToken');
+      sessionStorage.removeItem('user');
     }
   },
 
@@ -64,11 +65,11 @@ export const authService = {
   },
 
   getStoredUser(): User | null {
-    const user = localStorage.getItem('user');
+    const user = sessionStorage.getItem('user');
     return user ? JSON.parse(user) : null;
   },
 
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('authToken');
+    return !!sessionStorage.getItem('authToken');
   },
 };
