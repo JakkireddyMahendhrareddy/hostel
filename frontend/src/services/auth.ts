@@ -11,6 +11,7 @@ export interface User {
   email: string;
   full_name: string;
   role: string;
+  role_id?: number;
   phone?: string;
   hostel_id?: number; // Added for single hostel per user model
 }

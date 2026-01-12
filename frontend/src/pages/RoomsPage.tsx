@@ -497,7 +497,7 @@ export const RoomsPage: React.FC = () => {
       </div>
 
       {/* Desktop: Single Line Header */}
-      <div className="hidden md:flex items-center justify-between gap-4 -mt-2">
+      <div className="hidden md:flex items-center justify-between gap-4 -mt-8">
         {/* Left: Title */}
         <div className="flex-1">
           <h1 className="text-xl font-bold text-gray-900">Room Management</h1>
@@ -778,42 +778,50 @@ export const RoomsPage: React.FC = () => {
 
         {/* Pagination - Inside table container - Web View Only */}
         {filteredRooms.length > 0 && (
-          <div className="hidden md:flex items-center justify-center px-6 py-3 border-t border-gray-200">
-            <div className="flex items-center space-x-2">
-              {/* Previous Button */}
-              {currentPage > 1 && (
-                <button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  className="px-3 py-1 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-blue-600"
-                >
-                  Previous
-                </button>
-              )}
-              
-              {/* Page Numbers */}
-              {getPaginationPages().map((pageNumber, index) => (
-                <button
-                  key={index}
-                  onClick={() => typeof pageNumber === 'number' && handlePageChange(pageNumber)}
-                  className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                    currentPage === pageNumber
-                      ? "bg-blue-600 text-white"
-                      : "bg-white text-blue-600 hover:bg-blue-50 border border-blue-600"
-                  }`}
-                >
-                  {pageNumber}
-                </button>
-              ))}
-              
-              {/* Next Button */}
-              {currentPage < totalPages && (
-                <button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  className="px-3 py-1 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-blue-600"
-                >
-                  Next
-                </button>
-              )}
+          <div className="hidden md:block px-6 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              {/* Left: Total Rows Info */}
+              <div className="text-sm text-gray-600">
+                Showing <span className="font-semibold text-gray-900">{indexOfFirstRoom + 1}</span> to <span className="font-semibold text-gray-900">{Math.min(indexOfLastRoom, filteredRooms.length)}</span> of <span className="font-semibold text-gray-900">{filteredRooms.length}</span> rooms
+              </div>
+
+              {/* Center: Pagination Controls */}
+              <div className="flex items-center space-x-1">
+                {/* Previous Button */}
+                {currentPage > 1 && (
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                  >
+                    Previous
+                  </button>
+                )}
+
+                {/* Page Numbers */}
+                {getPaginationPages().map((pageNumber, index) => (
+                  <button
+                    key={index}
+                    onClick={() => typeof pageNumber === 'number' && handlePageChange(pageNumber)}
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      currentPage === pageNumber
+                        ? "bg-primary-600 text-white border border-primary-600"
+                        : "bg-white text-gray-700 border border-gray-300 hover:border-primary-600 hover:text-primary-600"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ))}
+
+                {/* Next Button */}
+                {currentPage < totalPages && (
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                  >
+                    Next
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

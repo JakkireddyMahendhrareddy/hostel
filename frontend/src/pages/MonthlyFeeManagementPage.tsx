@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Edit, Calendar, AlertCircle, MinusCircle, Eye, ChevronDown, ChevronUp, Search, X, DollarSign } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, AlertCircle, MinusCircle, Eye, ChevronDown, ChevronUp, Search, X, DollarSign } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import api from '../services/api';
@@ -38,25 +39,6 @@ interface MonthlyFee {
   floor_number?: number;
   payment_count?: number;
   admission_date?: string;
-}
-
-interface FeePayment {
-  payment_id: number;
-  fee_id: number | null;
-  student_id: number;
-  hostel_id: number;
-  amount: number;
-  payment_date: string;
-  payment_method: string;
-  payment_mode_id: number | null;
-  transaction_type: 'PAYMENT' | 'ADJUSTMENT' | 'REFUND';
-  transaction_id: string | null;
-  receipt_number: string | null;
-  notes: string | null;
-  reason: string | null;
-  fee_month: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
 interface PaymentMode {
@@ -102,22 +84,18 @@ export const MonthlyFeeManagementPage: React.FC = () => {
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [fees, setFees] = useState<MonthlyFee[]>([]);
   const [selectedFee, setSelectedFee] = useState<MonthlyFee | null>(null);
-  const [feePayments, setFeePayments] = useState<FeePayment[]>([]);
   const [paymentModes, setPaymentModes] = useState<PaymentMode[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'FULLY_PAID' | 'PARTIALLY_PAID' | 'PENDING'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
-  const [swipedItemId, setSwipedItemId] = useState<number | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
   const [showStatsCard, setShowStatsCard] = useState(false);
-  const swipeStartX = useRef<number | null>(null);
-  const swipeStartY = useRef<number | null>(null);
-  const swipeCurrentX = useRef<number | null>(null);
+  const [dateFilterStartDate, setDateFilterStartDate] = useState('');
+  const [dateFilterEndDate, setDateFilterEndDate] = useState('');
 
   // Modal states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showEditFeeModal, setShowEditFeeModal] = useState(false);
-  const [showPaymentHistoryModal, setShowPaymentHistoryModal] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
 
   // Form states
@@ -148,6 +126,10 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     payment_mode_id: '',
     notes: ''
   });
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const feesPerPage = 10;
 
   useEffect(() => {
     console.log('[MonthlyFeesPage] useEffect triggered, currentMonth:', currentMonth);
@@ -301,19 +283,11 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     }
   };
 
-  const handleFetchPaymentHistory = async (fee: MonthlyFee) => {
-    setSelectedFee(fee);
+  const navigate = useNavigate();
 
-    try {
-      // Fetch all payments for this student (across all months)
-      const response = await api.get(`/monthly-fees/student/${fee.student_id}/payments`);
-      setFeePayments(response.data.data || []);
-      setShowPaymentHistoryModal(true);
-    } catch (error) {
-      console.error('Fetch payments error:', error);
-      setFeePayments([]);
-      setShowPaymentHistoryModal(true);
-    }
+  const handleFetchPaymentHistory = (fee: MonthlyFee) => {
+    // Navigate to the fee details page
+    navigate(`/owner/monthly-fees/${fee.student_id}/${fee.fee_month}`);
   };
 
   const handleOpenPaymentModal = (fee: MonthlyFee) => {
@@ -332,38 +306,6 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     setShowPaymentModal(true);
   };
 
-  const handleOpenEditFeeModal = (fee: MonthlyFee) => {
-    // If fee_id is null, we need to create the fee record first
-    if (!fee.fee_id) {
-      toast.error('Fee record does not exist. Please create it first.');
-      return;
-    }
-
-    setSelectedFee(fee);
-    setEditFeeForm({
-      monthly_rent: fee.monthly_rent.toString(),
-      carry_forward: fee.carry_forward.toString(),
-      due_date: fee.due_date || '',
-      notes: fee.notes || ''
-    });
-    setShowEditFeeModal(true);
-  };
-
-  const handleOpenAdjustmentModal = () => {
-    if (!selectedFee?.fee_id) {
-      toast.error('Fee record does not exist. Cannot add adjustment.');
-      return;
-    }
-    setAdjustmentForm({
-      amount: '',
-      transaction_type: 'ADJUSTMENT',
-      reason: '',
-      payment_date: new Date().toISOString().split('T')[0],
-      payment_mode_id: '',
-      notes: ''
-    });
-    setShowAdjustmentModal(true);
-  };
 
   const handleRecordAdjustment = async () => {
     if (!selectedFee?.fee_id) {
@@ -408,19 +350,6 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     }
   };
 
-  const getTransactionTypeColor = (type: string) => {
-    switch (type) {
-      case 'PAYMENT':
-        return 'bg-green-100 text-green-800';
-      case 'ADJUSTMENT':
-        return 'bg-orange-100 text-orange-800';
-      case 'REFUND':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Fully Paid':
@@ -436,59 +365,6 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     }
   };
 
-  // Swipe gesture handlers
-  const handleTouchStart = (e: React.TouchEvent, itemId: number) => {
-    swipeStartX.current = e.touches[0].clientX;
-    swipeStartY.current = e.touches[0].clientY;
-    swipeCurrentX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (swipeStartX.current === null || swipeStartY.current === null) return;
-    
-    swipeCurrentX.current = e.touches[0].clientX;
-    const deltaX = swipeCurrentX.current - swipeStartX.current;
-    const deltaY = e.touches[0].clientY - swipeStartY.current;
-
-    // Only handle horizontal swipes (ignore if vertical movement is greater)
-    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
-      e.preventDefault();
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent, itemId: number) => {
-    if (swipeStartX.current === null || swipeCurrentX.current === null) return;
-
-    const deltaX = swipeStartX.current - swipeCurrentX.current;
-    const swipeThreshold = 80; // Minimum distance to trigger swipe
-
-    if (deltaX > swipeThreshold) {
-      // Swiped left - show actions
-      setSwipedItemId(itemId);
-    } else if (deltaX < -swipeThreshold) {
-      // Swiped right - hide actions
-      setSwipedItemId(null);
-    } else {
-      // Small movement - check if clicked/tapped
-      if (Math.abs(deltaX) < 10 && Math.abs(swipeStartY.current! - e.changedTouches[0].clientY) < 10) {
-        // It's a tap, not a swipe - open payment history
-        const fee = fees.find(f => (f.fee_id || f.student_id) === itemId);
-        if (fee) {
-          handleFetchPaymentHistory(fee);
-        }
-      }
-    }
-
-    swipeStartX.current = null;
-    swipeStartY.current = null;
-    swipeCurrentX.current = null;
-  };
-
-  const handleActionClick = (e: React.MouseEvent, action: () => void) => {
-    e.stopPropagation();
-    setSwipedItemId(null);
-    action();
-  };
 
 
   console.log('[MonthlyFeesPage] Render - loading:', loading, 'summary:', summary, 'fees.length:', fees.length);
@@ -501,45 +377,132 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     );
   }
 
-  const filteredFees = fees.filter((fee) => {
-    // Apply status filter
-    if (statusFilter !== 'ALL') {
-      const statusMap: Record<string, string> = {
-        'FULLY_PAID': 'Fully Paid',
-        'PARTIALLY_PAID': 'Partially Paid',
-        'PENDING': 'Pending'
-      };
-      if (fee.fee_status !== statusMap[statusFilter]) return false;
-    }
+  // Helper function to calculate due date
+  const calculateDueDate = (fee: MonthlyFee): Date | null => {
+    if (!fee.admission_date || !fee.fee_month) return null;
+    const admissionDate = new Date(fee.admission_date);
+    const admissionDay = admissionDate.getDate();
+    const dueDay = admissionDay - 1;
+    if (dueDay < 1) return null;
+    const [year, month] = fee.fee_month.split('-').map(Number);
+    return new Date(year, month - 1, dueDay);
+  };
 
-    // Apply search filter
-    if (searchTerm.trim()) {
-      const searchLower = searchTerm.toLowerCase();
-      const includes = (field: any) => {
-        if (field === null || field === undefined) return false;
-        return field.toString().toLowerCase().includes(searchLower);
-      };
+  // Helper function to convert date string to Date object
+  const dateStringToDate = (dateString: string): Date => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
 
-      return (
-        includes(fee.first_name) ||
-        includes(fee.last_name) ||
-        includes(fee.phone) ||
-        includes(fee.email) ||
-        includes(fee.room_number) ||
-        includes(fee.floor_number) ||
-        includes(fee.fee_status) ||
-        includes(fee.monthly_rent) ||
-        includes(fee.total_due) ||
-        includes(fee.balance)
-      );
-    }
+  const filteredFees = fees
+    .filter((fee) => {
+      // Apply status filter
+      if (statusFilter !== 'ALL') {
+        const statusMap: Record<string, string> = {
+          'FULLY_PAID': 'Fully Paid',
+          'PARTIALLY_PAID': 'Partially Paid',
+          'PENDING': 'Pending'
+        };
+        if (fee.fee_status !== statusMap[statusFilter]) return false;
+      }
 
-    return true;
-  });
+      // Apply search filter
+      if (searchTerm.trim()) {
+        const searchLower = searchTerm.toLowerCase();
+        const includes = (field: any) => {
+          if (field === null || field === undefined) return false;
+          return field.toString().toLowerCase().includes(searchLower);
+        };
+
+        const matchesSearch = (
+          includes(fee.first_name) ||
+          includes(fee.last_name) ||
+          includes(fee.phone) ||
+          includes(fee.email) ||
+          includes(fee.room_number) ||
+          includes(fee.floor_number) ||
+          includes(fee.fee_status) ||
+          includes(fee.monthly_rent) ||
+          includes(fee.total_due) ||
+          includes(fee.balance)
+        );
+
+        if (!matchesSearch) return false;
+      }
+
+      // Apply date range filter by due date
+      if (dateFilterStartDate && dateFilterEndDate) {
+        const dueDate = calculateDueDate(fee);
+        if (!dueDate) return false;
+
+        const startDate = dateStringToDate(dateFilterStartDate);
+        const endDate = dateStringToDate(dateFilterEndDate);
+
+        if (dueDate < startDate || dueDate > endDate) return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      // Sort by due date
+      const dueDateA = calculateDueDate(a);
+      const dueDateB = calculateDueDate(b);
+
+      if (!dueDateA && !dueDateB) return 0;
+      if (!dueDateA) return 1;
+      if (!dueDateB) return -1;
+
+      return dueDateA.getTime() - dueDateB.getTime();
+    });
 
   // Calculate statistics
   const totalAmount = filteredFees.reduce((sum, fee) => sum + (fee.total_due || 0), 0);
   const pendingAmount = filteredFees.reduce((sum, fee) => sum + (fee.balance || 0), 0);
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredFees.length / feesPerPage);
+  const indexOfLastFee = currentPage * feesPerPage;
+  const indexOfFirstFee = indexOfLastFee - feesPerPage;
+  const currentFees = filteredFees.slice(indexOfFirstFee, indexOfLastFee);
+
+  // Smart pagination display - show 3 pages at a time
+  const getPaginationPages = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 3;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      let start = Math.max(1, currentPage - 1);
+      const end = Math.min(totalPages, start + maxVisible - 1);
+
+      if (end - start < maxVisible - 1) {
+        start = Math.max(1, end - maxVisible + 1);
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+    }
+
+    return pages;
+  };
+
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
+
+  const handleStatusFilterChange = (value: 'ALL' | 'FULLY_PAID' | 'PARTIALLY_PAID' | 'PENDING') => {
+    setStatusFilter(value);
+    setCurrentPage(1);  // Reset to page 1 when filter changes
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);  // Reset to page 1 when search changes
+  };
 
   // Format month for display (e.g., "Jan 2026")
   const formatMonthDisplay = (monthValue: string) => {
@@ -562,37 +525,80 @@ export const MonthlyFeeManagementPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Mobile Month Selector and Status Filter */}
-        <div className="flex flex-row items-center gap-2">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Month:</label>
-            <div className="relative inline-block">
-              <input
-                type="month"
-                value={currentMonth}
-                onChange={(e) => setCurrentMonth(e.target.value)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                style={{ fontSize: '16px', zIndex: 10 }}
-              />
-              <div className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white shadow-sm pointer-events-none flex items-center gap-1.5 min-w-[6rem]">
-                <span>{formatMonthDisplay(currentMonth)}</span>
-                <span className="text-gray-500">📅</span>
-              </div>
+        {/* Mobile Month Selector */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Month:</label>
+          <div className="relative inline-block flex-1">
+            <input
+              type="month"
+              value={currentMonth}
+              onChange={(e) => setCurrentMonth(e.target.value)}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              style={{ fontSize: '16px', zIndex: 10 }}
+            />
+            <div className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white shadow-sm pointer-events-none flex items-center gap-1.5 min-w-[6rem]">
+              <span>{formatMonthDisplay(currentMonth)}</span>
+              <span className="text-gray-500">📅</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Status:</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'FULLY_PAID' | 'PARTIALLY_PAID' | 'PENDING')}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white flex-1 min-w-0"
-            >
-              <option value="ALL">All</option>
-              <option value="FULLY_PAID">Fully Paid</option>
-              <option value="PARTIALLY_PAID">Partially Paid</option>
-              <option value="PENDING">Pending</option>
-            </select>
+        </div>
+
+        {/* Mobile Date Range Filter */}
+        <div className="space-y-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+          <p className="text-xs font-medium text-gray-700">Filter by Due Date</p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <label className="text-xs text-gray-600">From Date:</label>
+              <input
+                type="date"
+                value={dateFilterStartDate}
+                onChange={(e) => {
+                  setDateFilterStartDate(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs text-gray-600">To Date:</label>
+              <input
+                type="date"
+                value={dateFilterEndDate}
+                onChange={(e) => {
+                  setDateFilterEndDate(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
           </div>
+          {(dateFilterStartDate || dateFilterEndDate) && (
+            <button
+              onClick={() => {
+                setDateFilterStartDate('');
+                setDateFilterEndDate('');
+                setCurrentPage(1);
+              }}
+              className="w-full px-2 py-1 text-xs text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              Clear Filter
+            </button>
+          )}
+        </div>
+
+        {/* Mobile Status Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Status:</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => handleStatusFilterChange(e.target.value as 'ALL' | 'FULLY_PAID' | 'PARTIALLY_PAID' | 'PENDING')}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white flex-1 min-w-0"
+          >
+            <option value="ALL">All</option>
+            <option value="FULLY_PAID">Fully Paid</option>
+            <option value="PARTIALLY_PAID">Partially Paid</option>
+            <option value="PENDING">Pending</option>
+          </select>
         </div>
 
         {/* Mobile Search Bar */}
@@ -611,31 +617,36 @@ export const MonthlyFeeManagementPage: React.FC = () => {
       </div>
 
       {/* Desktop: Single Line Header */}
-      <div className="hidden md:flex items-center justify-between gap-4">
-        {/* Left: Title */}
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-gray-900">
-            Monthly Fee Management
-          </h1>
-        </div>
-        
-        {/* Right: Total Amount, Pending Amount, Month, Status Filter, Search */}
-        <div className="flex items-center gap-3">
-          {/* Total Amount Card */}
-          <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-600 font-medium">Total:</span>
-              <span className="text-sm font-bold text-blue-600">₹{Math.floor(totalAmount).toLocaleString('en-IN')}</span>
-            </div>
+      <div className="hidden md:block">
+        <h1 className="text-xl font-bold text-gray-900 mb-4">
+          Monthly Fee Management
+        </h1>
+
+        {/* Desktop Filters Row 1: Search, Status, Month */}
+        <div className="flex items-center gap-3 mb-4">
+          {/* Search Bar */}
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search students..."
+              value={searchTerm}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
+            />
           </div>
 
-          {/* Pending Amount Card */}
-          <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-600 font-medium">Pending:</span>
-              <span className="text-sm font-bold text-red-600">₹{Math.floor(pendingAmount).toLocaleString('en-IN')}</span>
-            </div>
-          </div>
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => handleStatusFilterChange(e.target.value as 'ALL' | 'FULLY_PAID' | 'PARTIALLY_PAID' | 'PENDING')}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+          >
+            <option value="ALL">All</option>
+            <option value="FULLY_PAID">Fully Paid</option>
+            <option value="PARTIALLY_PAID">Partially Paid</option>
+            <option value="PENDING">Pending</option>
+          </select>
 
           {/* Month Picker */}
           <div className="flex items-center gap-2">
@@ -654,30 +665,47 @@ export const MonthlyFeeManagementPage: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'FULLY_PAID' | 'PARTIALLY_PAID' | 'PENDING')}
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
-          >
-            <option value="ALL">All</option>
-            <option value="FULLY_PAID">Fully Paid</option>
-            <option value="PARTIALLY_PAID">Partially Paid</option>
-            <option value="PENDING">Pending</option>
-          </select>
-
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+        {/* Desktop Filters Row 2: Date Range Filter */}
+        <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+          <p className="text-sm font-medium text-gray-700">Filter by Due Date:</p>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">From:</label>
             <input
-              type="text"
-              placeholder="Search students..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm w-48"
+              type="date"
+              value={dateFilterStartDate}
+              onChange={(e) => {
+                setDateFilterStartDate(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
             />
           </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">To:</label>
+            <input
+              type="date"
+              value={dateFilterEndDate}
+              onChange={(e) => {
+                setDateFilterEndDate(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+            />
+          </div>
+          {(dateFilterStartDate || dateFilterEndDate) && (
+            <button
+              onClick={() => {
+                setDateFilterStartDate('');
+                setDateFilterEndDate('');
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors ml-auto"
+            >
+              Clear Filter
+            </button>
+          )}
         </div>
       </div>
 
@@ -692,7 +720,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
             </p>
           </div>
         ) : (
-          filteredFees.map((fee, index) => {
+          currentFees.map((fee) => {
             const isExpanded = expandedCardId === (fee.fee_id || fee.student_id);
             return (
               <div
@@ -744,6 +772,21 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                           <p className="text-xs text-gray-500 mb-1">Admitted</p>
                           <p className="text-sm font-medium text-gray-900">
                             {fee.admission_date ? new Date(fee.admission_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Due Date</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {(() => {
+                              if (!fee.admission_date || !fee.fee_month) return '-';
+                              const admissionDate = new Date(fee.admission_date);
+                              const admissionDay = admissionDate.getDate();
+                              const dueDay = admissionDay - 1;
+                              if (dueDay < 1) return '-';
+                              const [year, month] = fee.fee_month.split('-').map(Number);
+                              const dueDate = new Date(year, month - 1, dueDay);
+                              return dueDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                            })()}
                           </p>
                         </div>
                         <div>
@@ -835,14 +878,14 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredFees.map((fee, index) => (
+                {currentFees.map((fee, index) => (
                   <tr
                     key={fee.fee_id || fee.student_id}
                     className="hover:bg-gray-50 cursor-pointer"
                     onClick={() => handleFetchPaymentHistory(fee)}
                   >
                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                      {index + 1}
+                      {indexOfFirstFee + index + 1}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                       {fee.first_name} {fee.last_name}
@@ -927,12 +970,55 @@ export const MonthlyFeeManagementPage: React.FC = () => {
           </div>
         )}
 
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-          <p className="text-sm text-gray-700">
-            Showing <span className="font-medium">{filteredFees.length}</span> student{filteredFees.length !== 1 ? 's' : ''}
-            {statusFilter !== 'ALL' && ` (${statusFilter === 'FULLY_PAID' ? 'Fully Paid' : statusFilter === 'PARTIALLY_PAID' ? 'Partially Paid' : 'Pending'})`}
-          </p>
-        </div>
+        {/* Pagination - Web View Only */}
+        {filteredFees.length > 0 && (
+          <div className="px-6 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              {/* Left: Total Fees Info */}
+              <div className="text-sm text-gray-600">
+                Showing <span className="font-semibold text-gray-900">{indexOfFirstFee + 1}</span> to <span className="font-semibold text-gray-900">{Math.min(indexOfLastFee, filteredFees.length)}</span> of <span className="font-semibold text-gray-900">{filteredFees.length}</span> fees
+              </div>
+
+              {/* Center: Pagination Controls */}
+              <div className="flex items-center space-x-1">
+                {/* Previous Button */}
+                {currentPage > 1 && (
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                  >
+                    Previous
+                  </button>
+                )}
+
+                {/* Page Numbers */}
+                {getPaginationPages().map((pageNumber, index) => (
+                  <button
+                    key={index}
+                    onClick={() => typeof pageNumber === 'number' && handlePageChange(pageNumber)}
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      currentPage === pageNumber
+                        ? "bg-primary-600 text-white border border-primary-600"
+                        : "bg-white text-gray-700 border border-gray-300 hover:border-primary-600 hover:text-primary-600"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ))}
+
+                {/* Next Button */}
+                {currentPage < totalPages && (
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                  >
+                    Next
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Mobile Summary */}
@@ -1133,217 +1219,6 @@ export const MonthlyFeeManagementPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* Payment History Modal */}
-      <Modal
-        isOpen={showPaymentHistoryModal}
-        onClose={() => setShowPaymentHistoryModal(false)}
-        title={`Fee Details - ${selectedFee?.first_name} ${selectedFee?.last_name}`}
-      >
-        <div className="space-y-4">
-          {/* Fee Summary */}
-          {selectedFee && (
-            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3 border-b pb-2">
-                Fee Summary - {selectedFee.fee_month}
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500">Room</label>
-                  <p className="text-sm text-gray-900">{selectedFee.room_number || '-'} (Floor {selectedFee.floor_number || '-'})</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500">Phone</label>
-                  <p className="text-sm text-gray-900">{selectedFee.phone}</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500">Monthly Rent</label>
-                  <p className="text-sm text-gray-900">₹{Math.floor(selectedFee.monthly_rent)}</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500">Carry Forward</label>
-                  <p className="text-sm text-gray-900">₹{Math.floor(selectedFee.carry_forward)}</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500">Total Due</label>
-                  <p className="text-sm font-medium text-gray-900">₹{Math.floor(selectedFee.total_due)}</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500">Paid Amount</label>
-                  <p className="text-sm text-green-600">₹{Math.floor(selectedFee.paid_amount)}</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500">Balance</label>
-                  <p className={`text-sm font-medium ${selectedFee.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    ₹{Math.floor(selectedFee.balance)}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500">Status</label>
-                  <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${getStatusColor(selectedFee.fee_status)}`}>
-                    {selectedFee.fee_status}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Transaction History */}
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-sm font-semibold text-gray-900">All Payment History</h3>
-              {selectedFee?.fee_id && (
-                <button
-                  onClick={handleOpenAdjustmentModal}
-                  className="flex items-center text-xs px-2 py-1 text-orange-600 hover:bg-orange-50 rounded transition-colors"
-                >
-                  <AlertCircle className="h-3 w-3 mr-1" />
-                  Add Adjustment
-                </button>
-              )}
-            </div>
-            {feePayments.length > 0 ? (
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {(() => {
-                  // Group payments by month
-                  const groupedPayments: { [key: string]: FeePayment[] } = {};
-                  feePayments.forEach((payment) => {
-                    // Use fee_month if available, otherwise derive from payment_date
-                    const monthKey = payment.fee_month || 
-                      `${new Date(payment.payment_date).getFullYear()}-${String(new Date(payment.payment_date).getMonth() + 1).padStart(2, '0')}`;
-                    if (!groupedPayments[monthKey]) {
-                      groupedPayments[monthKey] = [];
-                    }
-                    groupedPayments[monthKey].push(payment);
-                  });
-
-                  // Sort months in descending order (newest first)
-                  const sortedMonths = Object.keys(groupedPayments).sort((a, b) => b.localeCompare(a));
-
-                  // Month color mapping for visual indicators
-                  const monthColors = [
-                    'bg-blue-50 border-blue-200 text-blue-700',
-                    'bg-green-50 border-green-200 text-green-700',
-                    'bg-purple-50 border-purple-200 text-purple-700',
-                    'bg-yellow-50 border-yellow-200 text-yellow-700',
-                    'bg-pink-50 border-pink-200 text-pink-700',
-                    'bg-indigo-50 border-indigo-200 text-indigo-700',
-                  ];
-
-                  const formatMonth = (monthStr: string) => {
-                    const [year, month] = monthStr.split('-');
-                    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-                    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                  };
-
-                  return sortedMonths.map((monthKey, monthIndex) => {
-                    const payments = groupedPayments[monthKey];
-                    const colorClass = monthColors[monthIndex % monthColors.length];
-                    
-                    return (
-                      <div key={monthKey} className="space-y-2">
-                        {/* Month Header */}
-                        <div className={`sticky top-0 z-10 px-3 py-2 rounded-lg border ${colorClass} shadow-sm`}>
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-sm">{formatMonth(monthKey)}</span>
-                            <span className="text-xs font-medium opacity-75">
-                              {payments.length} {payments.length === 1 ? 'payment' : 'payments'}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        {/* Payments for this month */}
-                        <div className="space-y-2 pl-2">
-                          {payments.map((payment) => (
-                            <div
-                              key={payment.payment_id}
-                              className={`p-3 rounded-lg border ${
-                                payment.transaction_type === 'REFUND' ? 'border-red-200 bg-red-50' :
-                                payment.transaction_type === 'ADJUSTMENT' ? 'border-orange-200 bg-orange-50' :
-                                'border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700'
-                              }`}
-                            >
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className={`font-medium text-sm ${payment.amount < 0 ? 'text-red-600' : 'text-gray-900 dark:text-gray-100'}`}>
-                                      {payment.amount < 0 ? '-' : '+'}₹{Math.abs(Math.floor(payment.amount))}
-                                    </span>
-                                    <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${getTransactionTypeColor(payment.transaction_type || 'PAYMENT')}`}>
-                                      {payment.transaction_type || 'PAYMENT'}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1.5 flex items-center gap-2 flex-wrap">
-                                    <span className="flex items-center">
-                                      <Calendar size={12} className="inline mr-1" />
-                                      {new Date(payment.payment_date).toLocaleDateString('en-US', { 
-                                        day: 'numeric', 
-                                        month: 'short', 
-                                        year: 'numeric' 
-                                      })}
-                                    </span>
-                                    {payment.payment_method && (
-                                      <span className="text-gray-500">• {payment.payment_method}</span>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="text-right ml-3">
-                                  {payment.receipt_number && (
-                                    <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                                      #{payment.receipt_number}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              {payment.reason && (
-                                <div className="text-xs text-orange-700 dark:text-orange-400 mt-2 pt-2 border-t border-orange-200 dark:border-orange-800">
-                                  <strong>Reason:</strong> {payment.reason}
-                                </div>
-                              )}
-                              {payment.notes && (
-                                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">{payment.notes}</div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            ) : (
-              <div className="text-center text-gray-500 dark:text-gray-400 py-6 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                No transactions recorded yet
-              </div>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-3 pt-4 border-t">
-            <button
-              onClick={() => {
-                setShowPaymentHistoryModal(false);
-                if (selectedFee) handleOpenPaymentModal(selectedFee);
-              }}
-              className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Record Payment
-            </button>
-            {selectedFee?.fee_id && (
-              <button
-                onClick={() => {
-                  setShowPaymentHistoryModal(false);
-                  if (selectedFee) handleOpenEditFeeModal(selectedFee);
-                }}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-              >
-                <Edit className="h-4 w-4 mr-2" />
-                Edit Fee
-              </button>
-            )}
-          </div>
-        </div>
-      </Modal>
 
       {/* Adjustment Modal */}
       <Modal
@@ -1500,7 +1375,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
       </Modal>
 
       {/* Floating Action Buttons - Mobile Only */}
-      {!showPaymentModal && !showEditFeeModal && !showPaymentHistoryModal && !showAdjustmentModal && !showStatsCard && (
+      {!showPaymentModal && !showEditFeeModal && !showAdjustmentModal && !showStatsCard && (
         <>
           {/* Left Side: Statistics Button (Orange) */}
           <button
@@ -1519,7 +1394,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
               if (pendingFee) {
                 handleOpenPaymentModal(pendingFee);
               } else {
-                toast.info('No pending fees to record payment');
+                toast.error('No pending fees to record payment');
               }
             }}
             className="fixed bottom-6 right-6 z-40 h-14 w-14 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700 transition-all hover:scale-110 active:scale-95 flex items-center justify-center md:hidden"
@@ -1530,17 +1405,28 @@ export const MonthlyFeeManagementPage: React.FC = () => {
         </>
       )}
 
-      {/* Statistics Card Modal - Mobile Only */}
+      {/* Floating Statistics Button - Desktop Only */}
+      {!showPaymentModal && !showEditFeeModal && !showAdjustmentModal && !showStatsCard && (
+        <button
+          onClick={() => setShowStatsCard(true)}
+          className="hidden md:flex fixed bottom-6 right-6 z-40 h-14 w-14 bg-orange-500 text-white rounded-full shadow-lg hover:bg-orange-600 transition-all hover:scale-110 active:scale-95 items-center justify-center"
+          title="View Statistics"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
+      )}
+
+      {/* Statistics Card Modal - Mobile & Desktop */}
       {showStatsCard && (
-        <div className="md:hidden fixed inset-0 z-30">
+        <div className="fixed inset-0 z-30">
           {/* Backdrop */}
           <div 
             className="fixed inset-0 bg-black bg-opacity-30 transition-opacity duration-300"
             onClick={() => setShowStatsCard(false)}
           ></div>
 
-          {/* Bottom Sheet - Full Width */}
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-10 transform transition-transform duration-300 ease-out">
+          {/* Bottom Sheet - Mobile Only */}
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-10 transform transition-transform duration-300 ease-out">
             {/* Drag Handle */}
             <div className="flex justify-center pt-4 pb-2">
               <div className="w-16 h-1.5 bg-gray-300 rounded-full"></div>
@@ -1578,6 +1464,70 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                       <p className="text-4xl font-bold text-red-600">₹{Math.floor(pendingAmount).toLocaleString('en-IN')}</p>
                     </div>
                     <DollarSign className="h-10 w-10 text-red-400" />
+                  </div>
+                </div>
+
+                {/* Earned Amount */}
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200 w-full">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-2 font-medium">Earned Amount</p>
+                      <p className="text-4xl font-bold text-green-600">₹{Math.floor(totalAmount - pendingAmount).toLocaleString('en-IN')}</p>
+                    </div>
+                    <DollarSign className="h-10 w-10 text-green-400" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Centered Dialog - Desktop Only */}
+          <div className="hidden md:flex fixed inset-0 items-center justify-center z-10 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-transform duration-300 ease-out">
+              {/* Content */}
+              <div className="px-6 py-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-semibold text-gray-900">Fee Statistics</h3>
+                  <button
+                    onClick={() => setShowStatsCard(false)}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <X className="h-5 w-5 text-gray-400" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Total Amount */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200 w-full">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 mb-2 font-medium">Total Amount</p>
+                        <p className="text-3xl font-bold text-blue-600">₹{Math.floor(totalAmount).toLocaleString('en-IN')}</p>
+                      </div>
+                      <DollarSign className="h-10 w-10 text-blue-400" />
+                    </div>
+                  </div>
+
+                  {/* Pending Amount */}
+                  <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-2xl p-6 border-2 border-red-200 w-full">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 mb-2 font-medium">Pending Amount</p>
+                        <p className="text-3xl font-bold text-red-600">₹{Math.floor(pendingAmount).toLocaleString('en-IN')}</p>
+                      </div>
+                      <DollarSign className="h-10 w-10 text-red-400" />
+                    </div>
+                  </div>
+
+                  {/* Earned Amount */}
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200 w-full">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 mb-2 font-medium">Earned Amount</p>
+                        <p className="text-3xl font-bold text-green-600">₹{Math.floor(totalAmount - pendingAmount).toLocaleString('en-IN')}</p>
+                      </div>
+                      <DollarSign className="h-10 w-10 text-green-400" />
+                    </div>
                   </div>
                 </div>
               </div>

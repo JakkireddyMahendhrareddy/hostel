@@ -15,6 +15,7 @@ import { OwnerHostelsPage } from './pages/OwnerHostelsPage';
 import { RoomsPage } from './pages/RoomsPage';
 import { StudentsPage } from './pages/StudentsPage';
 import { MonthlyFeeManagementPage } from './pages/MonthlyFeeManagementPage';
+import { FeeDetailsPage } from './pages/FeeDetailsPage';
 import { IncomePage } from './pages/IncomePage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { ReportsPage } from './pages/ReportsPage';
@@ -206,6 +207,17 @@ function App() {
             }
           >
             <Route index element={<MonthlyFeeManagementPage />} />
+          </Route>
+
+          <Route
+            path="/owner/monthly-fees/:studentId/:feeMonth"
+            element={
+              <ProtectedRoute>
+                <MainLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<FeeDetailsPage />} />
           </Route>
 
           <Route
