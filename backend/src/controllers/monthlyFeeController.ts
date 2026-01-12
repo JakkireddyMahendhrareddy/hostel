@@ -530,6 +530,29 @@ export const getMonthlyFeesSummary = async (req: AuthRequest, res: Response) => 
       };
     });
 
+    // Get today's earnings from fee_payments table
+    let todayEarnings = 0;
+    try {
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      let todayQuery = db('fee_payments as fp')
+        .join('students as s', 'fp.student_id', 's.student_id')
+        .whereRaw('DATE(fp.payment_date) = ?', [today])
+        .sum('fp.amount as total');
+
+      // Apply hostel filter
+      if (user?.role_id === 2 && user.hostel_id) {
+        todayQuery = todayQuery.where('s.hostel_id', user.hostel_id);
+      } else if (hostelId) {
+        todayQuery = todayQuery.where('s.hostel_id', hostelId);
+      }
+
+      const todayResult = await todayQuery;
+      todayEarnings = parseFloat(todayResult[0]?.total || 0);
+      console.log('[getMonthlyFeesSummary] Today earnings:', todayEarnings);
+    } catch (error) {
+      console.error('[getMonthlyFeesSummary] Error fetching today earnings:', error);
+    }
+
     // Calculate summary statistics
     const summary = {
       total_students: fees.length,
@@ -539,6 +562,7 @@ export const getMonthlyFeesSummary = async (req: AuthRequest, res: Response) => 
       total_due: fees.reduce((sum, f) => sum + (f.total_due || 0), 0),
       total_paid: fees.reduce((sum, f) => sum + (f.paid_amount || 0), 0),
       total_pending: fees.reduce((sum, f) => sum + (f.balance || 0), 0),
+      today_earnings: todayEarnings,
       month: currentMonth
     };
 

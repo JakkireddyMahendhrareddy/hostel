@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { authService, User } from '../services/auth';
 
 interface AuthState {
@@ -10,12 +10,11 @@ interface AuthState {
   logout: () => Promise<void>;
   setUser: (user: User | null) => void;
   initializeAuth: () => Promise<void>;
-  verifyAndSyncAuth: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       isAuthenticated: false,
       isLoading: true,
@@ -28,8 +27,6 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
           });
-          // Broadcast to other tabs
-          window.localStorage.setItem('auth-change-event', Date.now().toString());
         } catch (error) {
           set({ user: null, isAuthenticated: false });
           throw error;
@@ -39,8 +36,6 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         await authService.logout();
         set({ user: null, isAuthenticated: false });
-        // Broadcast to other tabs
-        window.localStorage.setItem('auth-change-event', Date.now().toString());
       },
 
       setUser: (user: User | null) => {
@@ -51,9 +46,10 @@ export const useAuthStore = create<AuthState>()(
       },
 
       initializeAuth: async () => {
-        const token = localStorage.getItem('authToken');
+        // Use sessionStorage for tab-independent sessions
+        const token = sessionStorage.getItem('authToken');
         const storedUser = authService.getStoredUser();
-        
+
         if (!token || !storedUser) {
           set({
             user: null,
@@ -66,7 +62,7 @@ export const useAuthStore = create<AuthState>()(
         // Verify token matches stored user by fetching current user from backend
         try {
           const currentUser = await authService.getCurrentUser();
-          
+
           // Check if stored user matches current user from token
           if (currentUser.user_id === storedUser.user_id && currentUser.role_id === storedUser.role_id) {
             set({
@@ -75,7 +71,7 @@ export const useAuthStore = create<AuthState>()(
               isLoading: false,
             });
             // Update stored user to ensure it's in sync
-            localStorage.setItem('user', JSON.stringify(currentUser));
+            sessionStorage.setItem('user', JSON.stringify(currentUser));
           } else {
             // Mismatch - clear and logout
             await authService.logout();
@@ -95,35 +91,11 @@ export const useAuthStore = create<AuthState>()(
           });
         }
       },
-
-      verifyAndSyncAuth: async () => {
-        const token = localStorage.getItem('authToken');
-        if (!token) {
-          set({ user: null, isAuthenticated: false });
-          return;
-        }
-
-        try {
-          const currentUser = await authService.getCurrentUser();
-          const state = get();
-          
-          // If user changed, update state
-          if (!state.user || state.user.user_id !== currentUser.user_id || state.user.role_id !== currentUser.role_id) {
-            set({
-              user: currentUser,
-              isAuthenticated: true,
-            });
-            localStorage.setItem('user', JSON.stringify(currentUser));
-          }
-        } catch (error) {
-          // Token invalid
-          await authService.logout();
-          set({ user: null, isAuthenticated: false });
-        }
-      },
     }),
     {
-      name: 'hostel-auth-storage', // unique name for localStorage key
+      name: 'hostel-auth-storage',
+      // Use sessionStorage instead of localStorage for tab-independent sessions
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
@@ -132,12 +104,4 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
-// Listen for storage changes (other tabs logging in/out)
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (e) => {
-    if (e.key === 'authToken' || e.key === 'user' || e.key === 'auth-change-event') {
-      const store = useAuthStore.getState();
-      store.verifyAndSyncAuth();
-    }
-  });
-}
+// No cross-tab sync listener - each tab maintains its own independent session

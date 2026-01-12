@@ -13,7 +13,8 @@ export const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('authToken');
+    // Use sessionStorage for tab-independent sessions
+    const token = sessionStorage.getItem('authToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -31,15 +32,15 @@ api.interceptors.response.use(
     // Only redirect on 401 if user was previously authenticated (token exists)
     // This prevents redirecting on login failures
     if (error.response?.status === 401) {
-      const token = localStorage.getItem('authToken');
+      const token = sessionStorage.getItem('authToken');
       const currentPath = window.location.pathname;
 
       // Only redirect if:
       // 1. User had a valid token before (meaning session expired)
       // 2. They're not on the login/reset-password page already
       if (token && currentPath !== '/' && currentPath !== '/reset-password') {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('user');
+        sessionStorage.removeItem('authToken');
+        sessionStorage.removeItem('user');
         window.location.href = '/';
       }
     }
