@@ -16,6 +16,8 @@ import expenseRoutes from './routes/expenseRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import activityRoutes from './routes/activityRoutes.js';
 import amenitiesRoutes from './routes/amenities.routes.js';
+import relationsRoutes from './routes/relationsRoutes.js';
+import idProofTypesRoutes from './routes/idProofTypesRoutes.js';
 import { startMonthlyDuesGenerationJob } from './jobs/monthlyDuesGeneration.js';
 import { startMonthlyFeesGenerationJob } from './jobs/monthlyFeesGeneration.js';
 
@@ -52,6 +54,8 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/analytics', reportRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/amenities', amenitiesRoutes);
+app.use('/api/relations', relationsRoutes);
+app.use('/api/id-proof-types', idProofTypesRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

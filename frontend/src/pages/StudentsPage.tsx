@@ -73,6 +73,8 @@ export const StudentsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"Active" | "Inactive" | "All">("Active");
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [relations, setRelations] = useState<string[]>([]);
+  const [idProofTypes, setIdProofTypes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
@@ -84,6 +86,10 @@ export const StudentsPage: React.FC = () => {
     totalCapacity: number;
     remaining: number;
   } | null>(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const studentsPerPage = 10;
 
   // Format date to DD-MM-YYYY for display
   const formatDateDisplay = (dateStr: string) => {
@@ -132,16 +138,22 @@ export const StudentsPage: React.FC = () => {
     monthly_rent: "",
   });
 
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
   useEffect(() => {
     fetchStudents();
     fetchRooms();
     fetchHostelStats();
+    fetchRelations();
+    fetchIdProofTypes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Reapply filters when students data or filters change
   useEffect(() => {
     applyFilters(searchTerm, statusFilter);
+    // Reset to page 1 when filters change
+    setCurrentPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [students, statusFilter, searchTerm]);
 
@@ -224,6 +236,44 @@ export const StudentsPage: React.FC = () => {
     applyFilters(searchTerm, value);
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredStudents.length / studentsPerPage);
+  const indexOfLastStudent = currentPage * studentsPerPage;
+  const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
+  const currentStudents = filteredStudents.slice(indexOfFirstStudent, indexOfLastStudent);
+
+  // Smart pagination display - show 3 pages at a time
+  const getPaginationPages = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 3;
+
+    if (totalPages <= maxVisible) {
+      // Show all pages if total is 3 or less
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      // Show 3 pages centered around current page
+      let start = Math.max(1, currentPage - 1);
+      let end = Math.min(totalPages, start + maxVisible - 1);
+
+      // Adjust start if we're near the end
+      if (end - start < maxVisible - 1) {
+        start = Math.max(1, end - maxVisible + 1);
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+    }
+
+    return pages;
+  };
+
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
+
   const fetchRooms = async (includeFullRooms: boolean = false) => {
     try {
       const response = await api.get("/rooms");
@@ -253,7 +303,7 @@ export const StudentsPage: React.FC = () => {
       const allStudents = studentsResponse.data.data || [];
       
       const totalCapacity = rooms.reduce((sum: number, room: Room) => {
-        const capacity = room.total_capacity || (room.occupied_beds + room.available_beds) || room.room_type_id || 0;
+        const capacity = (room.occupied_beds || 0) + (room.available_beds || 0);
         return sum + capacity;
       }, 0);
       
@@ -279,6 +329,95 @@ export const StudentsPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [students]);
 
+  const fetchRelations = async () => {
+    try {
+      const response = await api.get("/relations");
+      if (response.data.success && response.data.data) {
+        // Extract relation names from the response
+        const relationNames = response.data.data.map((rel: any) => rel.relation_name || rel.name);
+        setRelations(relationNames);
+      }
+    } catch (error) {
+      console.error("Fetch relations error:", error);
+      // Fallback to default relations if API fails
+      setRelations([
+        "Father",
+        "Mother",
+        "Brother",
+        "Sister",
+        "Uncle",
+        "Aunt",
+        "Grandfather",
+        "Grandmother",
+        "Other"
+      ]);
+    }
+  };
+
+  const fetchIdProofTypes = async () => {
+    try {
+      const response = await api.get("/id-proof-types");
+      if (response.data.success && response.data.data) {
+        setIdProofTypes(response.data.data);
+      }
+    } catch (error) {
+      console.error("Fetch ID proof types error:", error);
+      // Fallback to default ID proof types with validation rules if API fails
+      setIdProofTypes([
+        {
+          id: 1,
+          name: "Aadhar Card",
+          code: "AADHAR",
+          regex_pattern: "^[0-9]{12}$",
+          min_length: 12,
+          max_length: 12,
+          display_order: 1
+        },
+        {
+          id: 2,
+          name: "PAN Card",
+          code: "PAN",
+          regex_pattern: "^[A-Z]{5}[0-9]{4}[A-Z]{1}$",
+          min_length: 10,
+          max_length: 10,
+          display_order: 2
+        },
+        {
+          id: 3,
+          name: "Voter ID",
+          code: "VOTER",
+          regex_pattern: "^[A-Z0-9]{10}$",
+          min_length: 10,
+          max_length: 10,
+          display_order: 3
+        },
+        {
+          id: 4,
+          name: "Driving License",
+          code: "DL",
+          regex_pattern: "^[A-Z0-9]{13,16}$",
+          min_length: 13,
+          max_length: 16,
+          display_order: 4
+        },
+        {
+          id: 5,
+          name: "Passport",
+          code: "PASSPORT",
+          regex_pattern: "^[A-Z][0-9]{7}$",
+          min_length: 8,
+          max_length: 8,
+          display_order: 5
+        }
+      ]);
+    }
+  };
+
+  // Helper function to get selected ID proof type validation rules
+  const getIdProofTypeRules = () => {
+    return idProofTypes.find((type) => type.name === formData.id_proof_type);
+  };
+
   const fetchHostelAdmissionFee = async () => {
     try {
       const response = await api.get("/hostels");
@@ -295,6 +434,92 @@ export const StudentsPage: React.FC = () => {
       }
     } catch (error) {
       console.error("Fetch hostel admission fee error:", error);
+    }
+  };
+
+  // Handler for phone fields - restrict to exactly 10 digits
+  const handlePhoneInput = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    fieldName: string
+  ) => {
+    const value = e.target.value.replace(/[^0-9]/g, ""); // Remove all non-digit characters
+
+    // Limit to 10 digits maximum
+    if (value.length <= 10) {
+      setFormData((prev) => ({
+        ...prev,
+        [fieldName]: value,
+      }));
+
+      // Clear error when user starts typing valid digits
+      if (formErrors[fieldName]) {
+        setFormErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors[fieldName];
+          return newErrors;
+        });
+      }
+    }
+  };
+
+  // Handler for ID proof number fields - filter characters based on selected type
+  const handleIdProofInput = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const value = e.target.value;
+    const selectedTypeRules = getIdProofTypeRules();
+
+    // If no type selected, allow any input
+    if (!selectedTypeRules) {
+      setFormData((prev) => ({
+        ...prev,
+        id_proof_number: value,
+      }));
+
+      // Clear error when user starts typing
+      if (formErrors.id_proof_number) {
+        setFormErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors.id_proof_number;
+          return newErrors;
+        });
+      }
+      return;
+    }
+
+    let filteredValue = value;
+
+    // Filter based on the selected ID proof type's allowed characters
+    if (selectedTypeRules.code === "AADHAR") {
+      // Aadhar: only digits
+      filteredValue = value.replace(/[^0-9]/g, "");
+    } else if (selectedTypeRules.code === "PAN") {
+      // PAN: uppercase letters and digits
+      filteredValue = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    } else if (selectedTypeRules.code === "VOTER") {
+      // Voter ID: uppercase letters and digits
+      filteredValue = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    } else if (selectedTypeRules.code === "DL") {
+      // Driving License: uppercase letters and digits
+      filteredValue = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    } else if (selectedTypeRules.code === "PASSPORT") {
+      // Passport: uppercase letters and digits
+      filteredValue = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    }
+
+    // Update with filtered value (allow any length for editing flexibility)
+    setFormData((prev) => ({
+      ...prev,
+      id_proof_number: filteredValue,
+    }));
+
+    // Clear error when user starts typing valid input
+    if (formErrors.id_proof_number) {
+      setFormErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors.id_proof_number;
+        return newErrors;
+      });
     }
   };
 
@@ -329,6 +554,22 @@ export const StudentsPage: React.FC = () => {
         }
       }
 
+      // Clear ID Proof Number when ID Proof Type changes
+      if (name === "id_proof_type" && value) {
+        // Clear the ID proof number to allow fresh input for new type
+        updated.id_proof_number = "";
+        // Also clear any previous error for id_proof_number
+        if (formErrors.id_proof_number) {
+          setTimeout(() => {
+            setFormErrors((prev) => {
+              const newErrors = { ...prev };
+              delete newErrors.id_proof_number;
+              return newErrors;
+            });
+          }, 0);
+        }
+      }
+
       // Auto-calculate due_date when admission_date changes (admission_date - 1 day)
       // Only auto-fill if due_date is empty or not manually changed
       if (name === "admission_date" && value && !editingStudent) {
@@ -340,10 +581,159 @@ export const StudentsPage: React.FC = () => {
 
       return updated;
     });
+
+    // Clear error for this field when user starts typing
+    if (formErrors[name]) {
+      setFormErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+  };
+
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    // First Name - Required
+    if (!formData.first_name.trim()) {
+      errors.first_name = "First Name is required";
+    }
+
+    // Last Name - Required
+    if (!formData.last_name.trim()) {
+      errors.last_name = "Last Name is required";
+    }
+
+    // Date of Birth - Required
+    if (!formData.date_of_birth) {
+      errors.date_of_birth = "Date of Birth is required";
+    }
+
+    // Gender - Validated by default value (always has value)
+    // Phone - Required and exactly 10 digits
+    if (!formData.phone.trim()) {
+      errors.phone = "Phone number is required";
+    } else if (formData.phone.length !== 10) {
+      errors.phone = "Phone number must be exactly 10 digits";
+    } else if (!/^[0-9]{10}$/.test(formData.phone)) {
+      errors.phone = "Phone number must contain only digits";
+    }
+
+    // Admission Date - Required
+    if (!formData.admission_date) {
+      errors.admission_date = "Admission Date is required";
+    }
+
+    // Admission Fee - Required and valid
+    if (!formData.admission_fee || formData.admission_fee === "") {
+      errors.admission_fee = "Admission Fee is required";
+    } else if (parseFloat(formData.admission_fee) <= 0) {
+      errors.admission_fee = "Admission Fee must be greater than 0";
+    }
+
+    // Guardian Name - Required
+    if (!formData.guardian_name.trim()) {
+      errors.guardian_name = "Guardian Name is required";
+    }
+
+    // Guardian Phone - Required and exactly 10 digits
+    if (!formData.guardian_phone.trim()) {
+      errors.guardian_phone = "Guardian phone number is required";
+    } else if (formData.guardian_phone.length !== 10) {
+      errors.guardian_phone = "Guardian phone number must be exactly 10 digits";
+    } else if (!/^[0-9]{10}$/.test(formData.guardian_phone)) {
+      errors.guardian_phone = "Guardian phone number must contain only digits";
+    }
+
+    // Guardian Relation - Required
+    if (!formData.guardian_relation.trim()) {
+      errors.guardian_relation = "Guardian Relation is required";
+    }
+
+    // Permanent Address - Required
+    if (!formData.permanent_address.trim()) {
+      errors.permanent_address = "Permanent Address is required";
+    }
+
+    // Present Working Address - Required
+    if (!formData.present_working_address.trim()) {
+      errors.present_working_address = "Present Working Address is required";
+    }
+
+    // ID Proof Number - Required with validation based on selected type
+    if (!formData.id_proof_number.trim()) {
+      errors.id_proof_number = "ID Proof Number is required";
+    } else if (formData.id_proof_type) {
+      // Find the selected ID proof type to get validation rules
+      const selectedType = idProofTypes.find(
+        (type) => type.name === formData.id_proof_type
+      );
+
+      console.log("🔍 ID Proof Validation Debug:", {
+        selected_type_name: formData.id_proof_type,
+        found_type: selectedType,
+        proof_number: formData.id_proof_number,
+        proof_number_length: formData.id_proof_number.length,
+        min_length: selectedType?.min_length,
+        max_length: selectedType?.max_length,
+      });
+
+      if (selectedType) {
+        const proofNumber = formData.id_proof_number.trim();
+
+        // Check length first
+        if (
+          proofNumber.length < selectedType.min_length ||
+          proofNumber.length > selectedType.max_length
+        ) {
+          errors.id_proof_number = `${selectedType.name} must be ${selectedType.min_length}-${selectedType.max_length} characters`;
+          console.log("❌ Length validation FAILED:", errors.id_proof_number);
+        }
+        // Check regex pattern
+        else if (selectedType.regex_pattern) {
+          try {
+            const regex = new RegExp(selectedType.regex_pattern);
+            if (!regex.test(proofNumber)) {
+              errors.id_proof_number = `Invalid format for ${selectedType.name}`;
+              console.log("❌ Regex validation FAILED:", errors.id_proof_number);
+            }
+          } catch (e) {
+            // If regex pattern is invalid, just check length
+            console.warn('⚠️ Invalid regex pattern:', selectedType.regex_pattern);
+          }
+        }
+      } else {
+        console.warn("⚠️ ID Proof Type NOT found in idProofTypes array. Looking for:", formData.id_proof_type);
+        console.warn("Available types:", idProofTypes.map(t => t.name));
+      }
+    }
+
+    // Room Allocation - Required
+    if (!formData.room_id) {
+      errors.room_id = "Room Allocation is required";
+    }
+
+    // Remove validation for fields with default values:
+    // - gender (default: "Male")
+    // - guardian_relation (default: "Father")
+    // - id_proof_type (default: "Aadhar")
+    // - id_proof_status (default: "Not Submitted")
+    // - admission_status (default: "Unpaid")
+    // - status (default: "Active")
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate form before submitting
+    if (!validateForm()) {
+      toast.error("Please fix the errors in the form");
+      return;
+    }
 
     const payload = {
       first_name: formData.first_name,
@@ -468,6 +858,7 @@ export const StudentsPage: React.FC = () => {
       floor_number: "",
       monthly_rent: "",
     });
+    setFormErrors({});
   };
 
   if (loading) {
@@ -579,7 +970,7 @@ export const StudentsPage: React.FC = () => {
             </p>
           </div>
         ) : (
-          filteredStudents.map((student) => {
+          currentStudents.map((student) => {
             const isExpanded = expandedCardId === student.student_id;
             return (
               <div
@@ -733,14 +1124,14 @@ export const StudentsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredStudents.map((student, index) => (
+              {currentStudents.map((student, index) => (
                 <tr
                   key={student.student_id}
                   className="hover:bg-gray-50 cursor-pointer"
                   onClick={() => setViewingStudent(student)}
                 >
                   <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                    {index + 1}
+                    {indexOfFirstStudent + index + 1}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                     {student.first_name} {student.last_name}
@@ -808,20 +1199,55 @@ export const StudentsPage: React.FC = () => {
           </div>
         )}
 
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-          <p className="text-sm text-gray-700">
-            Showing{" "}
-            <span className="font-medium">{filteredStudents.length}</span> of{" "}
-            <span className="font-medium">
-              {statusFilter === "Active"
-                ? students.filter(s => s.status === "Active").length
-                : statusFilter === "Inactive"
-                ? students.filter(s => s.status === "Inactive").length
-                : students.length}
-            </span>{" "}
-            student{filteredStudents.length !== 1 ? "s" : ""}
-          </p>
-        </div>
+        {/* Pagination - Web View Only */}
+        {filteredStudents.length > 0 && (
+          <div className="px-6 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              {/* Left: Total Students Info */}
+              <div className="text-sm text-gray-600">
+                Showing <span className="font-semibold text-gray-900">{indexOfFirstStudent + 1}</span> to <span className="font-semibold text-gray-900">{Math.min(indexOfLastStudent, filteredStudents.length)}</span> of <span className="font-semibold text-gray-900">{filteredStudents.length}</span> students
+              </div>
+
+              {/* Center: Pagination Controls */}
+              <div className="flex items-center space-x-1">
+                {/* Previous Button */}
+                {currentPage > 1 && (
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                  >
+                    Previous
+                  </button>
+                )}
+
+                {/* Page Numbers */}
+                {getPaginationPages().map((pageNumber, index) => (
+                  <button
+                    key={index}
+                    onClick={() => typeof pageNumber === 'number' && handlePageChange(pageNumber)}
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      currentPage === pageNumber
+                        ? "bg-primary-600 text-white border border-primary-600"
+                        : "bg-white text-gray-700 border border-gray-300 hover:border-primary-600 hover:text-primary-600"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ))}
+
+                {/* Next Button */}
+                {currentPage < totalPages && (
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                  >
+                    Next
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Mobile Summary */}
@@ -1170,7 +1596,7 @@ export const StudentsPage: React.FC = () => {
                 </button>
               </div>
             </div>
-            
+
             <div className="p-4 pb-6">
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Personal Information */}
@@ -1181,7 +1607,7 @@ export const StudentsPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        First Name *
+                        First Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -1189,21 +1615,31 @@ export const StudentsPage: React.FC = () => {
                         value={formData.first_name}
                         onChange={handleInputChange}
                         required
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.first_name ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.first_name && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.first_name}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Last Name
+                        Last Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         name="last_name"
                         value={formData.last_name}
                         onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.last_name ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.last_name && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.last_name}</p>
+                      )}
                     </div>
 
                     <div>
@@ -1221,7 +1657,7 @@ export const StudentsPage: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Gender *
+                        Gender <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="gender"
@@ -1238,17 +1674,25 @@ export const StudentsPage: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Phone *
+                        Phone <span className="text-red-500">*</span>
                       </label>
                       <input
-                        type="tel"
+                        type="text"
                         name="phone"
                         value={formData.phone}
-                        onChange={handleInputChange}
-                        required
-                        pattern="[0-9]{10}"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        onChange={(e) => handlePhoneInput(e, "phone")}
+                        maxLength={10}
+                        placeholder="10-digit phone number"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.phone ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formData.phone && formData.phone.length < 10 && !formErrors.phone && (
+                        <p className="mt-1 text-xs text-gray-500">{formData.phone.length}/10 digits</p>
+                      )}
+                      {formErrors.phone && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.phone}</p>
+                      )}
                     </div>
 
                     <div>
@@ -1266,7 +1710,7 @@ export const StudentsPage: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Admission Date *
+                        Admission Date <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="date"
@@ -1274,13 +1718,18 @@ export const StudentsPage: React.FC = () => {
                         value={formData.admission_date}
                         onChange={handleInputChange}
                         required
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.admission_date ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.admission_date && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.admission_date}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Admission Fee (₹) *
+                        Admission Fee (₹) <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="number"
@@ -1290,13 +1739,18 @@ export const StudentsPage: React.FC = () => {
                         required
                         min="0"
                         step="100"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.admission_fee ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.admission_fee && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.admission_fee}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Admission Status *
+                        Admission Status <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="admission_status"
@@ -1312,7 +1766,7 @@ export const StudentsPage: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Status *
+                        Status <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="status"
@@ -1336,7 +1790,7 @@ export const StudentsPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Guardian Name *
+                        Guardian Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -1344,39 +1798,56 @@ export const StudentsPage: React.FC = () => {
                         value={formData.guardian_name}
                         onChange={handleInputChange}
                         required
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.guardian_name ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.guardian_name && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.guardian_name}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Guardian Phone *
+                        Guardian Phone <span className="text-red-500">*</span>
                       </label>
                       <input
-                        type="tel"
+                        type="text"
                         name="guardian_phone"
                         value={formData.guardian_phone}
-                        onChange={handleInputChange}
-                        required
-                        pattern="[0-9]{10}"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        onChange={(e) => handlePhoneInput(e, "guardian_phone")}
+                        maxLength={10}
+                        placeholder="10-digit phone number"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.guardian_phone ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formData.guardian_phone && formData.guardian_phone.length < 10 && !formErrors.guardian_phone && (
+                        <p className="mt-1 text-xs text-gray-500">{formData.guardian_phone.length}/10 digits</p>
+                      )}
+                      {formErrors.guardian_phone && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.guardian_phone}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Relation
+                        Relation <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="guardian_relation"
                         value={formData.guardian_relation}
                         onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.guardian_relation ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       >
-                        <option value="Father">Father</option>
-                        <option value="Mother">Mother</option>
-                        <option value="Guardian">Guardian</option>
-                        <option value="Other">Other</option>
+                        <option value="">Select Relation</option>
+                        {relations.map((relation) => (
+                          <option key={relation} value={relation}>
+                            {relation}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -1390,69 +1861,96 @@ export const StudentsPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Permanent Address
+                        Permanent Address <span className="text-red-500">*</span>
                       </label>
                       <textarea
                         name="permanent_address"
                         value={formData.permanent_address}
                         onChange={handleInputChange}
                         rows={2}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.permanent_address ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.permanent_address && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.permanent_address}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Present Working Address
+                        Present Working Address <span className="text-red-500">*</span>
                       </label>
                       <textarea
                         name="present_working_address"
                         value={formData.present_working_address}
                         onChange={handleInputChange}
                         rows={2}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.present_working_address ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.present_working_address && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.present_working_address}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        ID Proof Type
+                        ID Proof Type <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="id_proof_type"
                         value={formData.id_proof_type}
                         onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.id_proof_type ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       >
-                        <option value="Aadhar">Aadhar Card</option>
-                        <option value="PAN">PAN Card</option>
-                        <option value="Voter ID">Voter ID</option>
-                        <option value="Driving License">Driving License</option>
+                        <option value="">Select ID Proof Type</option>
+                        {idProofTypes.map((type) => (
+                          <option key={type.id} value={type.name}>
+                            {type.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        ID Proof Number
+                        ID Proof Number <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         name="id_proof_number"
                         value={formData.id_proof_number}
-                        onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        onChange={handleIdProofInput}
+                        placeholder={getIdProofTypeRules()?.min_length && getIdProofTypeRules()?.max_length ? `${getIdProofTypeRules()?.min_length}-${getIdProofTypeRules()?.max_length} characters` : "Enter ID proof number"}
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.id_proof_number ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {getIdProofTypeRules() && !formErrors.id_proof_number && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Format: {getIdProofTypeRules()?.code} ({getIdProofTypeRules()?.min_length}-{getIdProofTypeRules()?.max_length} characters)
+                        </p>
+                      )}
+                      {formErrors.id_proof_number && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.id_proof_number}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        ID Proof Status
+                        ID Proof Status <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="id_proof_status"
                         value={formData.id_proof_status}
                         onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.id_proof_status ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       >
                         <option value="Not Submitted">Not Submitted</option>
                         <option value="Submitted">Submitted</option>
@@ -1464,18 +1962,20 @@ export const StudentsPage: React.FC = () => {
                 {/* Room Allocation (Optional) */}
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 mb-2">
-                    Room Allocation {editingStudent ? "" : "(Optional)"}
+                    Room Allocation
                   </h3>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Room
+                        Room <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="room_id"
                         value={formData.room_id}
                         onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.room_id ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       >
                         <option value="">Select Room</option>
                         {rooms.map((room) => (
@@ -1486,6 +1986,9 @@ export const StudentsPage: React.FC = () => {
                           </option>
                         ))}
                       </select>
+                      {formErrors.room_id && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.room_id}</p>
+                      )}
                     </div>
 
                     <div>
@@ -1566,7 +2069,7 @@ export const StudentsPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        First Name *
+                        First Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -1574,21 +2077,31 @@ export const StudentsPage: React.FC = () => {
                         value={formData.first_name}
                         onChange={handleInputChange}
                         required
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.first_name ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.first_name && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.first_name}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Last Name
+                        Last Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         name="last_name"
                         value={formData.last_name}
                         onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.last_name ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.last_name && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.last_name}</p>
+                      )}
                     </div>
 
                     <div>
@@ -1606,7 +2119,7 @@ export const StudentsPage: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Gender *
+                        Gender <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="gender"
@@ -1623,17 +2136,25 @@ export const StudentsPage: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Phone *
+                        Phone <span className="text-red-500">*</span>
                       </label>
                       <input
-                        type="tel"
+                        type="text"
                         name="phone"
                         value={formData.phone}
-                        onChange={handleInputChange}
-                        required
-                        pattern="[0-9]{10}"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        onChange={(e) => handlePhoneInput(e, "phone")}
+                        maxLength={10}
+                        placeholder="10-digit phone number"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.phone ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formData.phone && formData.phone.length < 10 && !formErrors.phone && (
+                        <p className="mt-1 text-xs text-gray-500">{formData.phone.length}/10 digits</p>
+                      )}
+                      {formErrors.phone && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.phone}</p>
+                      )}
                     </div>
 
                     <div>
@@ -1651,7 +2172,7 @@ export const StudentsPage: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Admission Date *
+                        Admission Date <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="date"
@@ -1659,13 +2180,18 @@ export const StudentsPage: React.FC = () => {
                         value={formData.admission_date}
                         onChange={handleInputChange}
                         required
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.admission_date ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.admission_date && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.admission_date}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Admission Fee (₹) *
+                        Admission Fee (₹) <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="number"
@@ -1675,13 +2201,18 @@ export const StudentsPage: React.FC = () => {
                         required
                         min="0"
                         step="100"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.admission_fee ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.admission_fee && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.admission_fee}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Admission Status *
+                        Admission Status <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="admission_status"
@@ -1697,7 +2228,7 @@ export const StudentsPage: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Status *
+                        Status <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="status"
@@ -1721,7 +2252,7 @@ export const StudentsPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Guardian Name *
+                        Guardian Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -1729,39 +2260,56 @@ export const StudentsPage: React.FC = () => {
                         value={formData.guardian_name}
                         onChange={handleInputChange}
                         required
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.guardian_name ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.guardian_name && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.guardian_name}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Guardian Phone *
+                        Guardian Phone <span className="text-red-500">*</span>
                       </label>
                       <input
-                        type="tel"
+                        type="text"
                         name="guardian_phone"
                         value={formData.guardian_phone}
-                        onChange={handleInputChange}
-                        required
-                        pattern="[0-9]{10}"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        onChange={(e) => handlePhoneInput(e, "guardian_phone")}
+                        maxLength={10}
+                        placeholder="10-digit phone number"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.guardian_phone ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formData.guardian_phone && formData.guardian_phone.length < 10 && !formErrors.guardian_phone && (
+                        <p className="mt-1 text-xs text-gray-500">{formData.guardian_phone.length}/10 digits</p>
+                      )}
+                      {formErrors.guardian_phone && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.guardian_phone}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Relation
+                        Relation <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="guardian_relation"
                         value={formData.guardian_relation}
                         onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.guardian_relation ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       >
-                        <option value="Father">Father</option>
-                        <option value="Mother">Mother</option>
-                        <option value="Guardian">Guardian</option>
-                        <option value="Other">Other</option>
+                        <option value="">Select Relation</option>
+                        {relations.map((relation) => (
+                          <option key={relation} value={relation}>
+                            {relation}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -1775,69 +2323,96 @@ export const StudentsPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Permanent Address
+                        Permanent Address <span className="text-red-500">*</span>
                       </label>
                       <textarea
                         name="permanent_address"
                         value={formData.permanent_address}
                         onChange={handleInputChange}
                         rows={2}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.permanent_address ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.permanent_address && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.permanent_address}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Present Working Address
+                        Present Working Address <span className="text-red-500">*</span>
                       </label>
                       <textarea
                         name="present_working_address"
                         value={formData.present_working_address}
                         onChange={handleInputChange}
                         rows={2}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.present_working_address ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {formErrors.present_working_address && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.present_working_address}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        ID Proof Type
+                        ID Proof Type <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="id_proof_type"
                         value={formData.id_proof_type}
                         onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.id_proof_type ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       >
-                        <option value="Aadhar">Aadhar Card</option>
-                        <option value="PAN">PAN Card</option>
-                        <option value="Voter ID">Voter ID</option>
-                        <option value="Driving License">Driving License</option>
+                        <option value="">Select ID Proof Type</option>
+                        {idProofTypes.map((type) => (
+                          <option key={type.id} value={type.name}>
+                            {type.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        ID Proof Number
+                        ID Proof Number <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         name="id_proof_number"
                         value={formData.id_proof_number}
-                        onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        onChange={handleIdProofInput}
+                        placeholder={getIdProofTypeRules()?.min_length && getIdProofTypeRules()?.max_length ? `${getIdProofTypeRules()?.min_length}-${getIdProofTypeRules()?.max_length} characters` : "Enter ID proof number"}
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.id_proof_number ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       />
+                      {getIdProofTypeRules() && !formErrors.id_proof_number && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Format: {getIdProofTypeRules()?.code} ({getIdProofTypeRules()?.min_length}-{getIdProofTypeRules()?.max_length} characters)
+                        </p>
+                      )}
+                      {formErrors.id_proof_number && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.id_proof_number}</p>
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        ID Proof Status
+                        ID Proof Status <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="id_proof_status"
                         value={formData.id_proof_status}
                         onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.id_proof_status ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       >
                         <option value="Not Submitted">Not Submitted</option>
                         <option value="Submitted">Submitted</option>
@@ -1849,18 +2424,20 @@ export const StudentsPage: React.FC = () => {
                 {/* Room Allocation (Optional) */}
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 mb-2">
-                    Room Allocation {editingStudent ? "" : "(Optional)"}
+                    Room Allocation
                   </h3>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Room
+                        Room <span className="text-red-500">*</span>
                       </label>
                       <select
                         name="room_id"
                         value={formData.room_id}
                         onChange={handleInputChange}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className={`w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                          formErrors.room_id ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       >
                         <option value="">Select Room</option>
                         {rooms.map((room) => (
@@ -1871,6 +2448,9 @@ export const StudentsPage: React.FC = () => {
                           </option>
                         ))}
                       </select>
+                      {formErrors.room_id && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.room_id}</p>
+                      )}
                     </div>
 
                     <div>

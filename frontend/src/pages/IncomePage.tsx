@@ -45,6 +45,11 @@ export const IncomePage: React.FC = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const incomePerPage = 10;
+
   const [formData, setFormData] = useState<IncomeFormData>({
     hostel_id: '1',
     income_date: new Date().toISOString().split('T')[0],
@@ -230,6 +235,47 @@ export const IncomePage: React.FC = () => {
     return sum + amount;
   }, 0);
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredIncomes.length / incomePerPage);
+  const indexOfLastIncome = currentPage * incomePerPage;
+  const indexOfFirstIncome = indexOfLastIncome - incomePerPage;
+  const currentIncomes = filteredIncomes.slice(indexOfFirstIncome, indexOfLastIncome);
+
+  // Smart pagination display - show 3 pages at a time
+  const getPaginationPages = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 3;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      let start = Math.max(1, currentPage - 1);
+      const end = Math.min(totalPages, start + maxVisible - 1);
+
+      if (end - start < maxVisible - 1) {
+        start = Math.max(1, end - maxVisible + 1);
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+    }
+
+    return pages;
+  };
+
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
+
+  // Reset pagination when search changes
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setCurrentPage(1);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 p-4">
@@ -281,7 +327,7 @@ export const IncomePage: React.FC = () => {
                 type="text"
                 placeholder="Search income..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-10 pr-10 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-48"
               />
               {searchQuery && (
@@ -379,7 +425,7 @@ export const IncomePage: React.FC = () => {
                   <p className="text-xs text-gray-400 mt-1">Try adjusting your search query</p>
                 </div>
               ) : (
-                filteredIncomes.map((income) => {
+                currentIncomes.map((income) => {
                 const isExpanded = expandedCardId === income.income_id;
                 
                 return (
@@ -479,83 +525,135 @@ export const IncomePage: React.FC = () => {
                   <p className="text-xs text-gray-400 mt-1">Try adjusting your search query</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-primary-600">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          S.NO
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Date
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Source
-                        </th>
-                        <th className="px-3 py-2 text-right text-[10px] font-medium text-white uppercase tracking-wider">
-                          Amount
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Payment Mode
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Receipt Number
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Description
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredIncomes.map((income, index) => (
-                        <tr key={income.income_id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                            {index + 1}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                            {formatDate(income.income_date)}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                            {income.source}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs font-semibold text-green-600 text-right">
-                            {formatCurrency(income.amount)}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                            {income.payment_mode}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                            {income.receipt_number || '-'}
-                          </td>
-                          <td className="px-3 py-2 text-xs text-gray-900 max-w-xs truncate">
-                            {income.description || '-'}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => handleEdit(income)}
-                                className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
-                                title="Edit"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(income.income_id)}
-                                className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </td>
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-primary-600">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            S.NO
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Date
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Source
+                          </th>
+                          <th className="px-3 py-2 text-right text-[10px] font-medium text-white uppercase tracking-wider">
+                            Amount
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Payment Mode
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Receipt Number
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Description
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Actions
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {currentIncomes.map((income, index) => (
+                          <tr key={income.income_id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-900">
+                              {indexOfFirstIncome + index + 1}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-900">
+                              {formatDate(income.income_date)}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-900">
+                              {income.source}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs font-semibold text-green-600 text-right">
+                              {formatCurrency(income.amount)}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-900">
+                              {income.payment_mode}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-900">
+                              {income.receipt_number || '-'}
+                            </td>
+                            <td className="px-3 py-1 text-xs text-gray-900 max-w-xs truncate">
+                              {income.description || '-'}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-500">
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleEdit(income)}
+                                  className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                                  title="Edit"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(income.income_id)}
+                                  className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination - Web View Only */}
+                  {filteredIncomes.length > 0 && (
+                    <div className="px-6 py-4 border-t border-gray-200">
+                      <div className="flex items-center justify-between">
+                        {/* Left: Total Income Info */}
+                        <div className="text-sm text-gray-600">
+                          Showing <span className="font-semibold text-gray-900">{indexOfFirstIncome + 1}</span> to <span className="font-semibold text-gray-900">{Math.min(indexOfLastIncome, filteredIncomes.length)}</span> of <span className="font-semibold text-gray-900">{filteredIncomes.length}</span> records
+                        </div>
+
+                        {/* Center: Pagination Controls */}
+                        <div className="flex items-center space-x-1">
+                          {/* Previous Button */}
+                          {currentPage > 1 && (
+                            <button
+                              onClick={() => handlePageChange(currentPage - 1)}
+                              className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                            >
+                              Previous
+                            </button>
+                          )}
+
+                          {/* Page Numbers */}
+                          {getPaginationPages().map((pageNumber, index) => (
+                            <button
+                              key={index}
+                              onClick={() => typeof pageNumber === 'number' && handlePageChange(pageNumber)}
+                              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                currentPage === pageNumber
+                                  ? "bg-primary-600 text-white border border-primary-600"
+                                  : "bg-white text-gray-700 border border-gray-300 hover:border-primary-600 hover:text-primary-600"
+                              }`}
+                            >
+                              {pageNumber}
+                            </button>
+                          ))}
+
+                          {/* Next Button */}
+                          {currentPage < totalPages && (
+                            <button
+                              onClick={() => handlePageChange(currentPage + 1)}
+                              className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                            >
+                              Next
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </>

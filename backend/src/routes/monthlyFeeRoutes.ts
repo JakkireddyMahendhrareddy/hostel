@@ -12,7 +12,9 @@ import {
   diagnoseCarryForward,
   getPreviousMonthsFees,
   editCurrentMonthFee,
-  getAvailableMonths
+  getAvailableMonths,
+  updatePayment,
+  deletePayment
 } from '../controllers/monthlyFeeController.js';
 
 const router = express.Router();
@@ -43,6 +45,12 @@ router.get('/student/:studentId/previous', getPreviousMonthsFees);
 
 // Record a payment for a monthly fee
 router.post('/:feeId/payment', recordPayment);
+
+// Update a payment record
+router.put('/payment/:paymentId', updatePayment);
+
+// Delete a payment record
+router.delete('/payment/:paymentId', deletePayment);
 
 // Record an adjustment or refund (for corrections)
 router.post('/:feeId/adjustment', recordAdjustment);

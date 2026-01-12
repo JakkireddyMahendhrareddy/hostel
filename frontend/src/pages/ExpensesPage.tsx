@@ -51,6 +51,8 @@ export const ExpensesPage: React.FC = () => {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const expensesPerPage = 10;
   const [showTotalExpensesCard, setShowTotalExpensesCard] = useState<boolean>(false);
   // Default to current month in YYYY-MM format
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
@@ -270,6 +272,59 @@ export const ExpensesPage: React.FC = () => {
     return sum + amount;
   }, 0);
 
+  // Pagination Logic
+  const totalPages = Math.ceil(filteredExpenses.length / expensesPerPage);
+  const indexOfLastExpense = currentPage * expensesPerPage;
+  const indexOfFirstExpense = indexOfLastExpense - expensesPerPage;
+  const currentExpenses = filteredExpenses.slice(indexOfFirstExpense, indexOfLastExpense);
+
+  const getPaginationPages = () => {
+    const pages: (number | string)[] = [];
+
+    if (totalPages <= 3) {
+      // Show all pages if 3 or fewer
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      // Show first, last, and current/nearby pages
+      pages.push(1);
+
+      if (currentPage > 2) {
+        pages.push('...');
+      }
+
+      const startPage = Math.max(2, currentPage - 1);
+      const endPage = Math.min(totalPages - 1, currentPage + 1);
+
+      for (let i = startPage; i <= endPage; i++) {
+        if (!pages.includes(i)) {
+          pages.push(i);
+        }
+      }
+
+      if (currentPage < totalPages - 2) {
+        pages.push('...');
+      }
+
+      pages.push(totalPages);
+    }
+
+    return pages;
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage > 0 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleSearchChange = (newSearchQuery: string) => {
+    setSearchQuery(newSearchQuery);
+    setCurrentPage(1); // Reset to first page when searching
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 p-4">
@@ -321,12 +376,12 @@ export const ExpensesPage: React.FC = () => {
                 type="text"
                 placeholder="Search expenses..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-10 pr-10 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent w-48"
               />
               {searchQuery && (
                 <button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => handleSearchChange('')}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full transition-colors"
                   title="Clear search"
                 >
@@ -380,12 +435,12 @@ export const ExpensesPage: React.FC = () => {
               type="text"
               placeholder="Search by category, amount, date, payment mode, vendor, bill..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
             />
             {searchQuery && (
               <button
-                onClick={() => setSearchQuery('')}
+                onClick={() => handleSearchChange('')}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full transition-colors"
                 title="Clear search"
               >
@@ -419,7 +474,7 @@ export const ExpensesPage: React.FC = () => {
                   <p className="text-xs text-gray-400 mt-1">Try adjusting your search query</p>
                 </div>
               ) : (
-                filteredExpenses.map((expense) => {
+                currentExpenses.map((expense) => {
                   const isExpanded = expandedCardId === expense.expense_id;
                   
                   return (
@@ -529,91 +584,143 @@ export const ExpensesPage: React.FC = () => {
                   <p className="text-xs text-gray-400 mt-1">Try adjusting your search query</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-primary-600">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          S.NO
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Date
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Category
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Description
-                        </th>
-                        <th className="px-3 py-2 text-right text-[10px] font-medium text-white uppercase tracking-wider">
-                          Amount
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Payment Mode
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Vendor
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Bill Number
-                        </th>
-                        <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredExpenses.map((expense, index) => (
-                        <tr key={expense.expense_id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                            {index + 1}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                            {formatDate(expense.expense_date)}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${getCategoryColor(expense.category_name)}`}>
-                              {expense.category_name}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-xs text-gray-900 max-w-xs truncate">
-                            {expense.description || '-'}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs font-semibold text-red-600 text-right">
-                            {formatCurrency(expense.amount)}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                            {expense.payment_mode}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                            {expense.vendor_name || '-'}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                            {expense.bill_number || '-'}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => handleEdit(expense)}
-                                className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
-                                title="Edit"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(expense.expense_id)}
-                                className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </td>
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-primary-600">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            S.NO
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Date
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Category
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Description
+                          </th>
+                          <th className="px-3 py-2 text-right text-[10px] font-medium text-white uppercase tracking-wider">
+                            Amount
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Payment Mode
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Vendor
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Bill Number
+                          </th>
+                          <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">
+                            Actions
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {currentExpenses.map((expense, index) => (
+                          <tr key={expense.expense_id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-900">
+                              {indexOfFirstExpense + index + 1}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-900">
+                              {formatDate(expense.expense_date)}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap">
+                              <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${getCategoryColor(expense.category_name)}`}>
+                                {expense.category_name}
+                              </span>
+                            </td>
+                            <td className="px-3 py-1 text-xs text-gray-900 max-w-xs truncate">
+                              {expense.description || '-'}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs font-semibold text-red-600 text-right">
+                              {formatCurrency(expense.amount)}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-900">
+                              {expense.payment_mode}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-900">
+                              {expense.vendor_name || '-'}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-900">
+                              {expense.bill_number || '-'}
+                            </td>
+                            <td className="px-3 py-1 whitespace-nowrap text-xs text-gray-500">
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleEdit(expense)}
+                                  className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                                  title="Edit"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(expense.expense_id)}
+                                  className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination - Web View Only */}
+                  {filteredExpenses.length > 0 && (
+                    <div className="px-6 py-4 border-t border-gray-200">
+                      <div className="flex items-center justify-between">
+                        {/* Left: Total Expenses Info */}
+                        <div className="text-sm text-gray-600">
+                          Showing <span className="font-semibold text-gray-900">{indexOfFirstExpense + 1}</span> to <span className="font-semibold text-gray-900">{Math.min(indexOfLastExpense, filteredExpenses.length)}</span> of <span className="font-semibold text-gray-900">{filteredExpenses.length}</span> records
+                        </div>
+
+                        {/* Center: Pagination Controls */}
+                        <div className="flex items-center space-x-1">
+                          {/* Previous Button */}
+                          {currentPage > 1 && (
+                            <button
+                              onClick={() => handlePageChange(currentPage - 1)}
+                              className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                            >
+                              Previous
+                            </button>
+                          )}
+
+                          {/* Page Numbers */}
+                          {getPaginationPages().map((pageNumber, index) => (
+                            <button
+                              key={index}
+                              onClick={() => typeof pageNumber === 'number' && handlePageChange(pageNumber)}
+                              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                currentPage === pageNumber
+                                  ? "bg-primary-600 text-white border border-primary-600"
+                                  : "bg-white text-gray-700 border border-gray-300 hover:border-primary-600 hover:text-primary-600"
+                              }`}
+                            >
+                              {pageNumber}
+                            </button>
+                          ))}
+
+                          {/* Next Button */}
+                          {currentPage < totalPages && (
+                            <button
+                              onClick={() => handlePageChange(currentPage + 1)}
+                              className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                            >
+                              Next
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </>

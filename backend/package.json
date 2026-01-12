@@ -7,7 +7,9 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "migrate": "knex migrate:latest",
-    "seed": "knex seed:run"
+    "seed": "knex seed:run",
+    "init:relations": "tsx scripts/initializeRelationsTable.ts",
+    "init:id-proof-types": "tsx scripts/initializeIdProofTypes.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
