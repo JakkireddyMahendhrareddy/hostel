@@ -325,7 +325,6 @@ export const getMonthlyFees = async (req: AuthRequest, res: Response) => {
         'mf.student_id',
         'mf.hostel_id',
         'mf.fee_month',
-        'mf.fee_date',
         'mf.monthly_rent',
         'mf.carry_forward',
         'mf.total_due',
@@ -356,7 +355,7 @@ export const getMonthlyFees = async (req: AuthRequest, res: Response) => {
       query = query.where('mf.hostel_id', hostelId);
     }
 
-    const fees = await query.orderBy('mf.fee_month', 'desc').orderBy('mf.fee_date', 'desc');
+    const fees = await query.orderBy('mf.fee_month', 'desc');
 
     res.json({
       success: true,
@@ -431,7 +430,6 @@ export const getMonthlyFeesSummary = async (req: AuthRequest, res: Response) => 
       .select(
         'mf.fee_id',
         'mf.fee_month',
-        'mf.fee_date',
         'mf.monthly_rent as fee_monthly_rent',
         'mf.carry_forward',
         'mf.total_due',
@@ -445,7 +443,6 @@ export const getMonthlyFeesSummary = async (req: AuthRequest, res: Response) => 
       query = query.select(
         db.raw('NULL as fee_id'),
         db.raw('? as fee_month', [currentMonth]),
-        db.raw('NULL as fee_date'),
         db.raw('NULL as fee_monthly_rent'),
         db.raw('0 as carry_forward'),
         db.raw('NULL as total_due'),
@@ -512,7 +509,6 @@ export const getMonthlyFeesSummary = async (req: AuthRequest, res: Response) => 
         student_id: row.student_id,
         hostel_id: row.hostel_id,
         fee_month: row.fee_month || currentMonth,
-        fee_date: row.fee_date || now.getDate(),
         monthly_rent: monthlyRent,
         carry_forward: carryForward,
         total_due: totalDue,
@@ -771,7 +767,6 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
     const now = new Date();
     const feeMonth = req.body.fee_month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const [year, month] = feeMonth.split('-');
-    const feeDate = parseInt(month);
 
     // Parse the user-entered due_date
     let userDueDate: Date;
@@ -823,7 +818,6 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
           student_id,
           hostel_id,
           fee_month: feeMonth,
-          fee_date: feeDate,
           monthly_rent: monthlyRent,
           carry_forward: carryForward,
           total_due: totalDue,
@@ -993,7 +987,6 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
             student_id,
             hostel_id,
             fee_month: nextFeeMonth,
-            fee_date: nextMonthDate.getMonth() + 1,
             monthly_rent: nextMonthlyRent,
             carry_forward: 0, // Fully paid, no carry forward
             total_due: nextMonthlyRent,
@@ -1072,7 +1065,6 @@ export const getPreviousMonthsFees = async (req: AuthRequest, res: Response) => 
       .select(
         'mf.fee_id',
         'mf.fee_month',
-        'mf.fee_date',
         'mf.monthly_rent',
         'mf.carry_forward',
         'mf.total_due',
@@ -1264,7 +1256,7 @@ export const getAvailableMonths = async (req: AuthRequest, res: Response) => {
     }
 
     let query = db('monthly_fees')
-      .distinct('fee_month', 'fee_date')
+      .distinct('fee_month')
       .where('student_id', studentId);
 
     // Authorization check
@@ -1286,10 +1278,7 @@ export const getAvailableMonths = async (req: AuthRequest, res: Response) => {
 
     res.json({
       success: true,
-      data: months.map(m => ({
-        month: m.fee_month,
-        date: m.fee_date
-      }))
+      data: months.map(m => m.fee_month)
     });
   } catch (error) {
     console.error('Get available months error:', error);

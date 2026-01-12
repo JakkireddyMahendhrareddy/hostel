@@ -9,7 +9,6 @@ import userRoutes from './routes/user.routes.js';
 import roomRoutes from './routes/roomRoutes.js';
 import studentRoutes from './routes/studentRoutes.js';
 import feeRoutes from './routes/feeRoutes.js';
-import feeCategoryRoutes from './routes/feeCategoryRoutes.js';
 import monthlyFeeRoutes from './routes/monthlyFeeRoutes.js';
 import incomeRoutes from './routes/incomeRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
@@ -18,7 +17,6 @@ import activityRoutes from './routes/activityRoutes.js';
 import amenitiesRoutes from './routes/amenities.routes.js';
 import relationsRoutes from './routes/relationsRoutes.js';
 import idProofTypesRoutes from './routes/idProofTypesRoutes.js';
-import { startMonthlyDuesGenerationJob } from './jobs/monthlyDuesGeneration.js';
 import { startMonthlyFeesGenerationJob } from './jobs/monthlyFeesGeneration.js';
 
 // Load environment variables
@@ -47,7 +45,6 @@ app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/fees', feeRoutes);
-app.use('/api/fee-categories', feeCategoryRoutes);
 app.use('/api/monthly-fees', monthlyFeeRoutes);
 app.use('/api/income', incomeRoutes);
 app.use('/api/expenses', expenseRoutes);
@@ -99,7 +96,6 @@ app.listen(PORT, () => {
   console.log(`🔐 Environment: ${process.env.NODE_ENV || 'development'}`);
 
   // Start cron jobs
-  startMonthlyDuesGenerationJob();
   startMonthlyFeesGenerationJob();
   console.log(`⏰ Cron jobs initialized`);
 });

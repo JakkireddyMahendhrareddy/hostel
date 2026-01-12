@@ -34,7 +34,6 @@ interface MonthlyFee {
   student_id: number;
   hostel_id: number;
   fee_month: string;
-  fee_date: number;
   monthly_rent: number;
   carry_forward: number;
   total_due: number;
@@ -113,6 +112,10 @@ export const MonthlyFeeManagementPage: React.FC = () => {
   const [dateFilterStartDate, setDateFilterStartDate] = useState("");
   const [dateFilterEndDate, setDateFilterEndDate] = useState("");
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const feesPerPage = 10;
+
   // Modal states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showEditFeeModal, setShowEditFeeModal] = useState(false);
@@ -156,6 +159,11 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     fetchMonthlyFeesSummary();
     fetchPaymentModes();
   }, [currentMonth]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, searchTerm, dateFilterStartDate, dateFilterEndDate]);
 
   const fetchPaymentModes = async () => {
     try {
@@ -509,6 +517,41 @@ export const MonthlyFeeManagementPage: React.FC = () => {
       return dueDateA.getTime() - dueDateB.getTime();
     });
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredFees.length / feesPerPage);
+  const indexOfLastFee = currentPage * feesPerPage;
+  const indexOfFirstFee = indexOfLastFee - feesPerPage;
+  const currentFees = filteredFees.slice(indexOfFirstFee, indexOfLastFee);
+
+  // Smart pagination display - show 3 pages at a time
+  const getPaginationPages = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 3;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      let start = Math.max(1, currentPage - 1);
+      let end = Math.min(totalPages, start + maxVisible - 1);
+
+      if (end - start < maxVisible - 1) {
+        start = Math.max(1, end - maxVisible + 1);
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+    }
+
+    return pages;
+  };
+
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
+
   // Calculate statistics
   const totalAmount = filteredFees.reduce(
     (sum, fee) => sum + (fee.total_due || 0),
@@ -830,14 +873,14 @@ export const MonthlyFeeManagementPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredFees.map((fee, index) => (
+              {currentFees.map((fee, index) => (
                 <tr
                   key={fee.fee_id || fee.student_id}
                   className="hover:bg-gray-50 cursor-pointer"
                   onClick={() => handleFetchPaymentHistory(fee)}
                 >
                   <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                    {index + 1}
+                    {indexOfFirstFee + index + 1}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                     {fee.first_name} {fee.last_name}
@@ -946,20 +989,54 @@ export const MonthlyFeeManagementPage: React.FC = () => {
           </div>
         )}
 
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-          <p className="text-sm text-gray-700">
-            Showing <span className="font-medium">{filteredFees.length}</span>{" "}
-            student{filteredFees.length !== 1 ? "s" : ""}
-            {statusFilter !== "ALL" &&
-              ` (${
-                statusFilter === "FULLY_PAID"
-                  ? "Fully Paid"
-                  : statusFilter === "PARTIALLY_PAID"
-                  ? "Partially Paid"
-                  : "Pending"
-              })`}
-          </p>
-        </div>
+        {filteredFees.length > 0 && (
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              {/* Left: Total Students Info */}
+              <div className="text-sm text-gray-600">
+                Showing <span className="font-semibold text-gray-900">{indexOfFirstFee + 1}</span> to <span className="font-semibold text-gray-900">{Math.min(indexOfLastFee, filteredFees.length)}</span> of <span className="font-semibold text-gray-900">{filteredFees.length}</span> students
+              </div>
+
+              {/* Center: Pagination Controls */}
+              <div className="flex items-center space-x-1">
+                {/* Previous Button */}
+                {currentPage > 1 && (
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                  >
+                    Previous
+                  </button>
+                )}
+
+                {/* Page Numbers */}
+                {getPaginationPages().map((pageNumber, index) => (
+                  <button
+                    key={index}
+                    onClick={() => typeof pageNumber === 'number' && handlePageChange(pageNumber)}
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      currentPage === pageNumber
+                        ? "bg-primary-600 text-white border border-primary-600"
+                        : "bg-white text-gray-700 border border-gray-300 hover:border-primary-600 hover:text-primary-600"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ))}
+
+                {/* Next Button */}
+                {currentPage < totalPages && (
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
+                  >
+                    Next
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Mobile Summary */}

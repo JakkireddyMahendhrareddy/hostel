@@ -23,21 +23,21 @@ export const getRecentActivity = async (req: AuthRequest, res: Response) => {
     const activities: any[] = [];
 
     // Get recent payments
-    let paymentsQuery = db('student_fee_payments as sfp')
-      .join('students as s', 'sfp.student_id', 's.student_id')
+    let paymentsQuery = db('fee_payments as fp')
+      .join('students as s', 'fp.student_id', 's.student_id')
       .select(
         db.raw("'payment' as type"),
-        'sfp.payment_id as id',
-        'sfp.payment_date as date',
+        'fp.payment_id as id',
+        'fp.payment_date as date',
         db.raw("CONCAT(s.first_name, ' ', s.last_name) as student_name"),
-        'sfp.amount_paid as amount',
-        'sfp.created_at'
+        'fp.amount as amount',
+        'fp.created_at'
       )
-      .orderBy('sfp.created_at', 'desc')
+      .orderBy('fp.created_at', 'desc')
       .limit(5);
 
     if (hostelIds.length > 0) {
-      paymentsQuery = paymentsQuery.whereIn('sfp.hostel_id', hostelIds);
+      paymentsQuery = paymentsQuery.whereIn('fp.hostel_id', hostelIds);
     }
 
     const payments = await paymentsQuery;

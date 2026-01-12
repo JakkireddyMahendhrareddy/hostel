@@ -46,8 +46,8 @@ export const cleanupInactiveStudents = async () => {
 
     // Delete related records first (foreign key constraints)
     await db('room_allocations').whereIn('student_id', studentIds).del();
-    await db('student_dues').whereIn('student_id', studentIds).del();
-    await db('student_fee_payments').whereIn('student_id', studentIds).del();
+    await db('fee_payments').whereIn('student_id', studentIds).del();
+    await db('monthly_fees').whereIn('student_id', studentIds).del();
 
     // Finally, delete the students
     const deletedCount = await db('students')
