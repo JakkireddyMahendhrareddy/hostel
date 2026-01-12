@@ -64,6 +64,7 @@ interface PaymentFormData {
   hostel_id: string;
   amount: string;
   payment_date: string;
+  due_date: string;
   payment_mode_id: string;
   transaction_id: string;
   receipt_number: string;
@@ -123,6 +124,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     hostel_id: "",
     amount: "",
     payment_date: new Date().toISOString().split("T")[0],
+    due_date: "",
     payment_mode_id: "",
     transaction_id: "",
     receipt_number: "",
@@ -216,8 +218,8 @@ export const MonthlyFeeManagementPage: React.FC = () => {
     console.log("[MonthlyFeesPage] paymentForm:", paymentForm);
     console.log("[MonthlyFeesPage] selectedFee:", selectedFee);
 
-    if (!paymentForm.amount || !selectedFee || !paymentForm.payment_mode_id) {
-      toast.error("Please fill all required fields");
+    if (!paymentForm.amount || !selectedFee || !paymentForm.payment_mode_id || !paymentForm.due_date) {
+      toast.error("Please fill all required fields including Due Date");
       return;
     }
 
@@ -235,6 +237,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
         fee_month: currentMonth, // Pass the selected month
         amount: paymentAmount,
         payment_date: paymentForm.payment_date,
+        due_date: paymentForm.due_date, // User-entered due date
         payment_mode_id: parseInt(paymentForm.payment_mode_id),
         transaction_id: paymentForm.transaction_id || null,
         receipt_number: paymentForm.receipt_number || null,
@@ -260,6 +263,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
         hostel_id: "",
         amount: "",
         payment_date: new Date().toISOString().split("T")[0],
+        due_date: "",
         payment_mode_id: "",
         transaction_id: "",
         receipt_number: "",
@@ -326,12 +330,22 @@ export const MonthlyFeeManagementPage: React.FC = () => {
 
   const handleOpenPaymentModal = (fee: MonthlyFee) => {
     setSelectedFee(fee);
+
+    // Pre-fill due_date from existing fee record or leave empty for user to enter
+    let prefillDueDate = "";
+    if (fee.due_date) {
+      // Convert to YYYY-MM-DD format for input
+      const date = new Date(fee.due_date);
+      prefillDueDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    }
+
     setPaymentForm({
       fee_id: fee.fee_id ? fee.fee_id.toString() : "", // Can be empty, backend will create fee record
       student_id: fee.student_id.toString(),
       hostel_id: fee.hostel_id.toString(),
       amount: fee.balance > 0 ? fee.balance.toString() : "", // Auto-fill with balance amount
       payment_date: new Date().toISOString().split("T")[0],
+      due_date: prefillDueDate,
       payment_mode_id: "",
       transaction_id: "",
       receipt_number: "",
@@ -523,8 +537,8 @@ export const MonthlyFeeManagementPage: React.FC = () => {
         </div>
 
         {/* Filters on Right - Single Line on Desktop, Month+Status on one line mobile */}
-        <div className="w-full lg:w-auto flex flex-wrap md:flex-row items-start md:items-center gap-1.5 md:gap-3">
-          <div className="flex items-center gap-1.5 flex-1 min-w-0 sm:flex-none md:gap-2">
+        <div className="w-full lg:w-auto flex flex-wrap md:flex-row items-start md:items-center gap-1.0 md:gap-3">
+          <div className="flex items-center gap-1.0 flex-1 min-w-0 sm:flex-none md:gap-3">
             <label className="text-xs md:text-sm font-medium text-gray-700 whitespace-nowrap">
               Month:
             </label>
@@ -535,7 +549,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
               className="px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
             />
           </div>
-          <div className="flex items-center gap-1.5 flex-1 min-w-0 sm:flex-none md:gap-2">
+          <div className="flex items-center gap-1.5 flex-1 min-w-0 sm:flex-none md:gap-3">
             <label className="text-xs md:text-sm font-medium text-gray-700 whitespace-nowrap">
               Status:
             </label>
@@ -569,7 +583,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
       </div>
 
       {/* Search Bar - Full Width */}
-      <div className="relative">
+      {/* <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <Search className="h-4 w-4 text-gray-400" />
         </div>
@@ -580,7 +594,22 @@ export const MonthlyFeeManagementPage: React.FC = () => {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="block w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
         />
-      </div>
+      </div> */}
+      <div className="relative w-64">
+  <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+    <Search className="h-4 w-4 text-gray-400" />
+  </div>
+  <input
+    type="text"
+    placeholder="Search..."
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    className="w-full pl-8 pr-2 py-1.5 text-sm border border-gray-300 rounded-md 
+               focus:ring-1 focus:ring-primary-500 focus:border-primary-500 
+               bg-white"
+  />
+</div>
+
 
       {/* Date Range Filter - Desktop Only */}
       {showDateFilter && (
@@ -718,6 +747,25 @@ export const MonthlyFeeManagementPage: React.FC = () => {
                                   }
                                 )
                               : "-"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Due Date</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {(() => {
+                              if (!fee.admission_date || !fee.fee_month) return "-";
+                              const admissionDate = new Date(fee.admission_date);
+                              const admissionDay = admissionDate.getDate();
+                              const dueDay = admissionDay - 1;
+                              if (dueDay < 1) return "-";
+                              const [year, month] = fee.fee_month.split("-").map(Number);
+                              const dueDate = new Date(year, month - 1, dueDay);
+                              return dueDate.toLocaleDateString("en-IN", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              });
+                            })()}
                           </p>
                         </div>
                         <div>
@@ -1082,6 +1130,25 @@ export const MonthlyFeeManagementPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Due Date <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={paymentForm.due_date}
+                onChange={(e) =>
+                  setPaymentForm({
+                    ...paymentForm,
+                    due_date: e.target.value,
+                  })
+                }
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                End date of current billing cycle
+              </p>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Payment Mode <span className="text-red-500">*</span>

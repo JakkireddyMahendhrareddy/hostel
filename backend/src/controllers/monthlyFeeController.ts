@@ -698,6 +698,7 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
       hostel_id,
       amount,
       payment_date,
+      due_date,
       payment_mode_id,
       transaction_id,
       receipt_number,
@@ -855,14 +856,18 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
 
     try {
       // Record payment in fee_payments table
-      // Parse payment_date properly to avoid timezone issues
-      let paymentDateObj: Date;
-      if (typeof payment_date === 'string' && payment_date.includes('-')) {
-        // Parse YYYY-MM-DD format to avoid timezone issues
-        const [year, month, day] = payment_date.split('-').map(Number);
-        paymentDateObj = new Date(year, month - 1, day);
+      // Keep payment_date as YYYY-MM-DD string to avoid timezone issues
+      let paymentDateStr: string;
+      if (typeof payment_date === 'string' && payment_date.match(/^\d{4}-\d{2}-\d{2}/)) {
+        // Already in YYYY-MM-DD format, use as-is (take first 10 chars)
+        paymentDateStr = payment_date.substring(0, 10);
+      } else if (typeof payment_date === 'string' && payment_date.includes('T')) {
+        // ISO format, extract date part
+        paymentDateStr = payment_date.split('T')[0];
       } else {
-        paymentDateObj = new Date(payment_date);
+        // Fallback: use current date
+        const now = new Date();
+        paymentDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       }
 
       const paymentData: any = {
@@ -870,7 +875,7 @@ export const recordPayment = async (req: AuthRequest, res: Response) => {
         student_id,
         hostel_id,
         amount: paymentAmount,
-        payment_date: paymentDateObj,
+        payment_date: paymentDateStr,
         payment_mode_id: payment_mode_id || null,
         transaction_id: transaction_id || null,
         receipt_number: receipt_number || null,
