@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, AlertCircle, Edit2, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, AlertCircle, Calendar, Edit2, Trash2, X } from "lucide-react";
 import api from "../services/api";
 import toast from "react-hot-toast";
 
@@ -18,6 +18,9 @@ interface FeePayment {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  transaction_type?: "PAYMENT" | "ADJUSTMENT" | "REFUND";
+  reason?: string | null;
+  fee_month?: string | null;
 }
 
 interface PaymentMode {
@@ -26,7 +29,7 @@ interface PaymentMode {
   order_index?: number;
 }
 
-interface EditPaymentFormData {
+interface EditFormData {
   amount: string;
   payment_date: string;
   payment_mode_id: string;
@@ -35,21 +38,34 @@ interface EditPaymentFormData {
   notes: string;
 }
 
+const getTransactionTypeColor = (type: string) => {
+  switch (type) {
+    case "PAYMENT":
+      return "bg-green-100 text-green-800";
+    case "ADJUSTMENT":
+      return "bg-orange-100 text-orange-800";
+    case "REFUND":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+};
+
 export const FeeDetailsPage: React.FC = () => {
   const { studentId, feeMonth } = useParams();
   const navigate = useNavigate();
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [paymentModes, setPaymentModes] = useState<PaymentMode[]>([]);
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    open: boolean;
-    paymentId: number | null;
-  }>({ open: false, paymentId: null });
-  const [editModal, setEditModal] = useState<{
-    open: boolean;
-    payment: FeePayment | null;
-  }>({ open: false, payment: null });
-  const [editForm, setEditForm] = useState<EditPaymentFormData>({
+  const [editLoading, setEditLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Edit modal state
+  const [editModal, setEditModal] = useState({
+    open: false,
+    payment: null as FeePayment | null,
+  });
+  const [editForm, setEditForm] = useState<EditFormData>({
     amount: "",
     payment_date: "",
     payment_mode_id: "",
@@ -57,10 +73,12 @@ export const FeeDetailsPage: React.FC = () => {
     transaction_id: "",
     notes: "",
   });
-  const [editLoading, setEditLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
-  const [expandedPaymentId, setExpandedPaymentId] = useState<number | null>(null);
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    open: false,
+    paymentId: null as number | null,
+  });
 
   useEffect(() => {
     fetchPaymentHistory();
@@ -69,10 +87,10 @@ export const FeeDetailsPage: React.FC = () => {
 
   const fetchPaymentModes = async () => {
     try {
-      const response = await api.get("/fees/payment-modes");
+      const response = await api.get("/payment-modes");
       setPaymentModes(response.data.data || []);
     } catch (error) {
-      console.error("Fetch payment modes error:", error);
+      console.error("Error fetching payment modes:", error);
     }
   };
 
@@ -128,91 +146,16 @@ export const FeeDetailsPage: React.FC = () => {
     }
   };
 
-  const handleEditPayment = (payment: FeePayment) => {
-    // Convert payment_date to YYYY-MM-DD format for date input (handle timezone)
-    const paymentDate = new Date(payment.payment_date);
-    const year = paymentDate.getFullYear();
-    const month = String(paymentDate.getMonth() + 1).padStart(2, "0");
-    const day = String(paymentDate.getDate()).padStart(2, "0");
-    const formattedDate = `${year}-${month}-${day}`;
-
+  const handleEditOpen = (payment: FeePayment) => {
     setEditForm({
       amount: payment.amount.toString(),
-      payment_date: formattedDate,
+      payment_date: payment.payment_date.split("T")[0],
       payment_mode_id: payment.payment_mode_id?.toString() || "",
       receipt_number: payment.receipt_number || "",
       transaction_id: payment.transaction_id || "",
       notes: payment.notes || "",
     });
     setEditModal({ open: true, payment });
-  };
-
-  const handleEditFormChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
-  ) => {
-    const { name, value } = e.target;
-    setEditForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleEditSubmit = async () => {
-    if (!editModal.payment) return;
-
-    // Validate required fields
-    if (!editForm.amount || !editForm.payment_date || !editForm.payment_mode_id) {
-      toast.error("Amount, Payment Date, and Payment Mode are required");
-      return;
-    }
-
-    // Validate amount is positive number
-    const amount = parseFloat(editForm.amount);
-    if (isNaN(amount) || amount <= 0) {
-      toast.error("Amount must be a positive number");
-      return;
-    }
-
-    // Validate payment date is not in future
-    // Parse YYYY-MM-DD string to avoid timezone issues
-    const [year, month, day] = editForm.payment_date.split('-').map(Number);
-    const paymentDate = new Date(year, month - 1, day);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    paymentDate.setHours(0, 0, 0, 0);
-    if (paymentDate > today) {
-      toast.error("Payment date cannot be in the future");
-      return;
-    }
-
-    try {
-      setEditLoading(true);
-
-      const updateData = {
-        amount: amount,
-        payment_date: editForm.payment_date,
-        payment_mode_id: parseInt(editForm.payment_mode_id, 10),
-        receipt_number: editForm.receipt_number || null,
-        transaction_id: editForm.transaction_id || null,
-        notes: editForm.notes || null,
-      };
-
-      await api.put(
-        `/monthly-fees/payment/${editModal.payment.payment_id}`,
-        updateData
-      );
-
-      toast.success("Payment updated successfully");
-      setEditModal({ open: false, payment: null });
-      fetchPaymentHistory();
-    } catch (error) {
-      console.error("Update error:", error);
-      toast.error("Failed to update payment");
-    } finally {
-      setEditLoading(false);
-    }
   };
 
   const handleEditCancel = () => {
@@ -227,36 +170,71 @@ export const FeeDetailsPage: React.FC = () => {
     });
   };
 
-  const handleDeleteClick = (paymentId: number) => {
-    setDeleteConfirm({ open: true, paymentId });
+  const handleEditFormChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setEditForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!deleteConfirm.paymentId) return;
+  const handleEditSubmit = async () => {
+    if (!editModal.payment) return;
+
+    if (!editForm.amount || !editForm.payment_date) {
+      toast.error("Amount and payment date are required");
+      return;
+    }
 
     try {
-      await api.delete(`/monthly-fees/payment/${deleteConfirm.paymentId}`);
-      toast.success("Payment deleted successfully");
-      setDeleteConfirm({ open: false, paymentId: null });
-      fetchPaymentHistory();
-    } catch (error) {
-      console.error("Delete error:", error);
-      toast.error("Failed to delete payment");
+      setEditLoading(true);
+      await api.put(`/monthly-fees/payments/${editModal.payment.payment_id}`, {
+        amount: parseFloat(editForm.amount),
+        payment_date: editForm.payment_date,
+        payment_mode_id: editForm.payment_mode_id
+          ? parseInt(editForm.payment_mode_id)
+          : null,
+        receipt_number: editForm.receipt_number || null,
+        transaction_id: editForm.transaction_id || null,
+        notes: editForm.notes || null,
+      });
+
+      toast.success("Payment updated successfully");
+      handleEditCancel();
+      await fetchPaymentHistory();
+    } catch (error: any) {
+      console.error("Edit error:", error);
+      toast.error(error?.response?.data?.error || "Failed to update payment");
+    } finally {
+      setEditLoading(false);
     }
+  };
+
+  const handleDeleteOpen = (paymentId: number) => {
+    setDeleteConfirm({ open: true, paymentId });
   };
 
   const handleDeleteCancel = () => {
     setDeleteConfirm({ open: false, paymentId: null });
   };
 
-  // Pagination logic
-  const totalPages = Math.ceil(payments.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedPayments = payments.slice(startIndex, endIndex);
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.paymentId) return;
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    try {
+      setDeleteLoading(true);
+      await api.delete(`/monthly-fees/payments/${deleteConfirm.paymentId}`);
+      toast.success("Payment deleted successfully");
+      handleDeleteCancel();
+      await fetchPaymentHistory();
+    } catch (error: any) {
+      console.error("Delete error:", error);
+      toast.error(error?.response?.data?.error || "Failed to delete payment");
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   if (loading) {
@@ -282,245 +260,279 @@ export const FeeDetailsPage: React.FC = () => {
             <ArrowLeft className="h-5 w-5 text-gray-600" />
           </button>
           <h1 className="text-lg font-semibold text-blue-800">
-            Payment History
+            All Past Payment History
           </h1>
         </div>
       </div>
 
-      {/* Main Content - Desktop Table View */}
-      <div className="hidden md:block px-4 py-4">
+      {/* Main Content */}
+      <div className="flex-1 px-4 py-4">
         {payments.length > 0 ? (
           <>
-            <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
-              <table className="w-full">
-                <thead className="bg-primary-600">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">S.NO</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">DATE</th>
-                    <th className="px-3 py-2 text-right text-[10px] font-medium text-white uppercase tracking-wider">AMOUNT</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">PAYMENT METHOD</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">RECEIPT</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-medium text-white uppercase tracking-wider">NOTES</th>
-                    <th className="px-3 py-2 text-center text-[10px] font-medium text-white uppercase tracking-wider">ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedPayments.map((payment, index) => (
-                  <tr
-                    key={payment.payment_id}
-                    className="border-b border-gray-200 text-[13px]"
-                  >
-                    <td className="px-3 py-2 text-gray-800 font-semibold text-center">
-                      {index + 1}
-                    </td>
-                    <td className="px-3 py-2 text-gray-800">
-                      {new Date(payment.payment_date).toLocaleDateString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold">
-                      <span
-                        className={
-                          payment.amount < 0 ? "text-red-600" : "text-green-600"
-                        }
+            {/* Mobile Card View */}
+            <div className="block md:hidden space-y-4">
+              {(() => {
+                // Group payments by month
+                const groupedPayments: { [key: string]: FeePayment[] } = {};
+                payments.forEach((payment) => {
+                  // Use fee_month if available, otherwise derive from payment_date
+                  const monthKey =
+                    payment.fee_month ||
+                    `${new Date(payment.payment_date).getFullYear()}-${String(
+                      new Date(payment.payment_date).getMonth() + 1
+                    ).padStart(2, "0")}`;
+                  if (!groupedPayments[monthKey]) {
+                    groupedPayments[monthKey] = [];
+                  }
+                  groupedPayments[monthKey].push(payment);
+                });
+
+                // Sort months in descending order (newest first)
+                const sortedMonths = Object.keys(groupedPayments).sort(
+                  (a, b) => b.localeCompare(a)
+                );
+
+                // Month color mapping for visual indicators
+                const monthColors = [
+                  "bg-blue-50 border-blue-200 text-blue-700",
+                  "bg-green-50 border-green-200 text-green-700",
+                  "bg-purple-50 border-purple-200 text-purple-700",
+                  "bg-yellow-50 border-yellow-200 text-yellow-700",
+                  "bg-pink-50 border-pink-200 text-pink-700",
+                  "bg-indigo-50 border-indigo-200 text-indigo-700",
+                ];
+
+                const formatMonth = (monthStr: string) => {
+                  const [year, month] = monthStr.split("-");
+                  const date = new Date(
+                    parseInt(year),
+                    parseInt(month) - 1,
+                    1
+                  );
+                  return date.toLocaleDateString("en-US", {
+                    month: "long",
+                    year: "numeric",
+                  });
+                };
+
+                return sortedMonths.map((monthKey, monthIndex) => {
+                  const monthPayments = groupedPayments[monthKey];
+                  const colorClass =
+                    monthColors[monthIndex % monthColors.length];
+
+                  return (
+                    <div key={monthKey} className="space-y-2">
+                      {/* Month Header */}
+                      <div
+                        className={`sticky top-12 z-10 px-4 py-3 rounded-lg border ${colorClass} shadow-sm`}
                       >
-                        {payment.amount < 0 ? "-" : "+"}₹
-                        {Math.abs(Math.floor(payment.amount)).toLocaleString(
-                          "en-IN"
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {payment.payment_method || "-"}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {payment.receipt_number ? `#${payment.receipt_number}` : "-"}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {payment.notes || "-"}
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => handleEditPayment(payment)}
-                          className="p-1 text-blue-600 hover:text-blue-700 transition"
-                          title="Edit payment"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(payment.payment_id)}
-                          className="p-1 text-red-600 hover:text-red-700 transition"
-                          title="Delete payment"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-sm">
+                            {formatMonth(monthKey)}
+                          </span>
+                          <span className="text-xs font-medium opacity-75">
+                            {monthPayments.length}{" "}
+                            {monthPayments.length === 1 ? "payment" : "payments"}
+                          </span>
+                        </div>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              </table>
+
+                      {/* Payments for this month */}
+                      <div className="space-y-2">
+                        {monthPayments.map((payment) => (
+                          <div
+                            key={payment.payment_id}
+                            className={`p-4 rounded-lg border ${
+                              payment.transaction_type === "REFUND"
+                                ? "border-red-200 bg-red-50"
+                                : payment.transaction_type === "ADJUSTMENT"
+                                ? "border-orange-200 bg-orange-50"
+                                : "border-gray-200 bg-white"
+                            }`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 flex-wrap mb-2">
+                                  <span
+                                    className={`font-semibold text-base ${
+                                      payment.amount < 0
+                                        ? "text-red-600"
+                                        : "text-green-600"
+                                    }`}
+                                  >
+                                    {payment.amount < 0 ? "-" : "+"}₹
+                                    {Math.abs(Math.floor(payment.amount)).toLocaleString(
+                                      "en-IN"
+                                    )}
+                                  </span>
+                                  <span
+                                    className={`px-2 py-1 text-xs font-medium rounded ${getTransactionTypeColor(
+                                      payment.transaction_type || "PAYMENT"
+                                    )}`}
+                                  >
+                                    {payment.transaction_type || "PAYMENT"}
+                                  </span>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-2 mb-2">
+                                  <button
+                                    onClick={() => handleEditOpen(payment)}
+                                    className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition"
+                                  >
+                                    <Edit2 size={14} />
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteOpen(payment.payment_id)}
+                                    className="flex items-center gap-1 px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition"
+                                  >
+                                    <Trash2 size={14} />
+                                    Delete
+                                  </button>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <Calendar size={14} />
+                                    <span>
+                                      {new Date(
+                                        payment.payment_date
+                                      ).toLocaleDateString("en-IN", {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric",
+                                      })}
+                                    </span>
+                                  </div>
+
+                                  {payment.payment_method && (
+                                    <div className="text-sm text-gray-600">
+                                      <strong>Method:</strong> {payment.payment_method}
+                                    </div>
+                                  )}
+
+                                  {payment.receipt_number && (
+                                    <div className="text-sm text-gray-600">
+                                      <strong>Receipt:</strong> #{payment.receipt_number}
+                                    </div>
+                                  )}
+
+                                  {payment.transaction_id && (
+                                    <div className="text-sm text-gray-600">
+                                      <strong>Transaction ID:</strong> {payment.transaction_id}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {payment.reason && (
+                              <div className="mt-3 pt-3 border-t border-orange-200 text-sm">
+                                <p className="text-orange-700">
+                                  <strong>Reason:</strong> {payment.reason}
+                                </p>
+                              </div>
+                            )}
+
+                            {payment.notes && (
+                              <div className="mt-2 text-sm text-gray-600">
+                                <p><strong>Notes:</strong> {payment.notes}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
 
-            {/* Pagination Controls - Desktop */}
-            <div className="px-6 py-4 border-t border-gray-200">
-              <div className="flex items-center justify-between">
-                {/* Left: Total Payments Info */}
-                <div className="text-sm text-gray-600">
-                  Showing <span className="font-semibold text-gray-900">{startIndex + 1}</span> to <span className="font-semibold text-gray-900">{Math.min(endIndex, payments.length)}</span> of <span className="font-semibold text-gray-900">{payments.length}</span> payments
-                </div>
-
-                {/* Right: Pagination Controls */}
-                <div className="flex items-center space-x-1">
-                  {/* Previous Button */}
-                  {currentPage > 1 && (
-                    <button
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
-                    >
-                      Previous
-                    </button>
-                  )}
-
-                  {/* Page Numbers */}
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <button
-                      key={page}
-                      onClick={() => handlePageChange(page)}
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        currentPage === page
-                          ? "bg-primary-600 text-white border border-primary-600"
-                          : "bg-white text-gray-700 border border-gray-300 hover:border-primary-600 hover:text-primary-600"
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-
-                  {/* Next Button */}
-                  {currentPage < totalPages && (
-                    <button
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      className="px-3 py-2 rounded-md text-sm font-medium transition-colors bg-white text-blue-600 hover:bg-blue-50 border border-gray-300 hover:border-blue-600"
-                    >
-                      Next
-                    </button>
-                  )}
-                </div>
+            {/* Desktop Table View */}
+            <div className="hidden md:block">
+              <div className="overflow-x-auto bg-white rounded-lg border border-gray-200 shadow-sm">
+                <table className="w-full">
+                  <thead className="bg-primary-600">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Date</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-white uppercase tracking-wider">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Method</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Receipt #</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Transaction ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Notes</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {payments.map((payment) => (
+                      <tr key={payment.payment_id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 text-sm text-gray-800">
+                          {new Date(payment.payment_date).toLocaleDateString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold text-right">
+                          <span
+                            className={
+                              payment.amount < 0 ? "text-red-600" : "text-green-600"
+                            }
+                          >
+                            {payment.amount < 0 ? "-" : "+"}₹
+                            {Math.abs(Math.floor(payment.amount)).toLocaleString(
+                              "en-IN"
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span
+                            className={`inline-block px-2.5 py-1 text-xs font-medium rounded ${getTransactionTypeColor(
+                              payment.transaction_type || "PAYMENT"
+                            )}`}
+                          >
+                            {payment.transaction_type || "PAYMENT"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {payment.payment_method || "-"}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {payment.receipt_number ? `#${payment.receipt_number}` : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+                          {payment.transaction_id || "-"}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate">
+                          {payment.notes || "-"}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleEditOpen(payment)}
+                              className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
+                              title="Edit payment"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteOpen(payment.payment_id)}
+                              className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
+                              title="Delete payment"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </>
-        ) : (
-          <div className="text-center py-12 text-gray-500">
-            <AlertCircle className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-base">No payment history recorded yet</p>
-          </div>
-        )}
-      </div>
-
-      {/* Main Content - Mobile Card View */}
-      <div className="md:hidden px-4 py-4 space-y-3">
-        {payments.length > 0 ? (
-          payments.map((payment, index) => {
-            const isExpanded = expandedPaymentId === payment.payment_id;
-            return (
-              <div key={payment.payment_id} className="bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all">
-                {/* Card Header - Collapsed View */}
-                <div
-                  className="p-3 cursor-pointer flex items-center justify-between"
-                  onClick={() => setExpandedPaymentId(isExpanded ? null : payment.payment_id)}
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex-shrink-0">
-                      {isExpanded ? (
-                        <ChevronUp className="h-5 w-5 text-gray-400" />
-                      ) : (
-                        <ChevronDown className="h-5 w-5 text-gray-400" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs font-semibold text-gray-500 uppercase block">Payment #{index + 1}</span>
-                      <p className="text-xs text-gray-700 font-medium">
-                        {new Date(payment.payment_date).toLocaleDateString("en-IN", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-sm font-bold flex-shrink-0 ${
-                      payment.amount < 0 ? "text-red-600" : "text-green-600"
-                    }`}
-                  >
-                    {payment.amount < 0 ? "-" : "+"}₹
-                    {Math.abs(Math.floor(payment.amount)).toLocaleString("en-IN")}
-                  </span>
-                </div>
-
-                {/* Card Details - Expanded View */}
-                {isExpanded && (
-                  <div className="pt-3 pb-3 px-3 border-t border-gray-100 space-y-3">
-                    {/* Payment Method */}
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Payment Method</p>
-                      <p className="text-sm font-medium text-gray-800">{payment.payment_method || "-"}</p>
-                    </div>
-
-                    {/* Receipt */}
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Receipt</p>
-                      <p className="text-sm font-medium text-gray-800">
-                        {payment.receipt_number ? `#${payment.receipt_number}` : "-"}
-                      </p>
-                    </div>
-
-                    {/* Transaction ID */}
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Transaction ID</p>
-                      <p className="text-sm font-medium text-gray-800">{payment.transaction_id || "-"}</p>
-                    </div>
-
-                    {/* Notes */}
-                    {payment.notes && (
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Notes</p>
-                        <p className="text-sm font-medium text-gray-800">{payment.notes}</p>
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
-                      <button
-                        onClick={() => {
-                          setExpandedPaymentId(null);
-                          handleEditPayment(payment);
-                        }}
-                        className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
-                        title="Edit payment"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setExpandedPaymentId(null);
-                          handleDeleteClick(payment.payment_id);
-                        }}
-                        className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
-                        title="Delete payment"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
         ) : (
           <div className="text-center py-12 text-gray-500">
             <AlertCircle className="h-12 w-12 text-gray-300 mx-auto mb-4" />
@@ -698,9 +710,10 @@ export const FeeDetailsPage: React.FC = () => {
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition"
+                disabled={deleteLoading}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition disabled:opacity-50"
               >
-                Delete
+                {deleteLoading ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
@@ -709,3 +722,5 @@ export const FeeDetailsPage: React.FC = () => {
     </div>
   );
 };
+
+export default FeeDetailsPage;

@@ -210,7 +210,7 @@ function App() {
           </Route>
 
           <Route
-            path="/owner/monthly-fees/:studentId/:feeMonth"
+            path="/owner/fee-details/:studentId/:feeMonth"
             element={
               <ProtectedRoute>
                 <MainLayout />
