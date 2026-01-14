@@ -506,7 +506,22 @@ export const MonthlyFeeManagementPage: React.FC = () => {
       return true;
     })
     .sort((a, b) => {
-      // Sort by due date
+      // Sort by payment status first: Pending/Partially Paid at top, Fully Paid at bottom
+      const statusPriority: Record<string, number> = {
+        "Pending": 1,
+        "Partially Paid": 2,
+        "Overdue": 1, // Treat overdue same as pending (urgent)
+        "Fully Paid": 3,
+      };
+
+      const priorityA = statusPriority[a.fee_status] || 4;
+      const priorityB = statusPriority[b.fee_status] || 4;
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      // Secondary sort: by due date within same status
       const dueDateA = getDueDate(a);
       const dueDateB = getDueDate(b);
 
