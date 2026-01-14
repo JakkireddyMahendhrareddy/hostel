@@ -94,14 +94,15 @@ export const getStudentById = async (req: AuthRequest, res: Response) => {
     }
 
     // Get payment history
-    const payments = await db('student_fee_payments')
+    const payments = await db('fee_payments')
       .where({ student_id: studentId })
       .orderBy('payment_date', 'desc')
       .limit(10);
 
-    // Get pending dues
-    const dues = await db('student_dues')
-      .where({ student_id: studentId, is_paid: 0 })
+    // Get pending dues from monthly_fees
+    const dues = await db('monthly_fees')
+      .where({ student_id: studentId })
+      .whereIn('fee_status', ['Pending', 'Partially Paid'])
       .select('*');
 
     res.json({
@@ -274,14 +275,12 @@ export const createStudent = async (req: AuthRequest, res: Response) => {
         try {
           const now = new Date();
           const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-          const feeDate = now.getMonth() + 1; // Month as number (1-12)
 
           // Check if fee already exists for this month
           const existingFee = await db('monthly_fees')
             .where({
               student_id,
-              fee_month: currentMonth,
-              fee_date: feeDate
+              fee_month: currentMonth
             })
             .first();
 
@@ -294,7 +293,6 @@ export const createStudent = async (req: AuthRequest, res: Response) => {
               student_id,
               hostel_id,
               fee_month: currentMonth,
-              fee_date: feeDate,
               monthly_rent: monthlyRent,
               carry_forward: 0.00,
               total_due: monthlyRent,
@@ -504,25 +502,6 @@ export const updateStudent = async (req: AuthRequest, res: Response) => {
           console.error('Error updating room occupied_beds:', bedError);
         }
 
-        // Update unpaid dues with new monthly rent
-        const newRent = updatedStudent.monthly_rent || 0;
-        const oldRent = student.monthly_rent || 0;
-        const rentDifference = newRent - oldRent;
-
-        if (rentDifference !== 0) {
-          try {
-            await db('student_dues')
-              .where({ student_id: studentId, is_paid: 0 })
-              .update({
-                monthly_rent: newRent,
-                total_amount: db.raw('total_amount + ?', [rentDifference]),
-                balance_amount: db.raw('balance_amount + ?', [rentDifference]),
-                updated_at: new Date()
-              });
-          } catch (duesError: any) {
-            console.error('Error updating student dues:', duesError);
-          }
-        }
       } else if (!oldRoomId && finalRoomId) {
         // Student was assigned a new room
         try {
@@ -591,13 +570,13 @@ export const deleteStudent = async (req: AuthRequest, res: Response) => {
     }
 
     // Delete all related data first (to avoid foreign key constraints)
-    // Delete student fee payments
-    await db('student_fee_payments')
+    // Delete fee payments
+    await db('fee_payments')
       .where({ student_id: studentId })
       .del();
 
-    // Delete student dues
-    await db('student_dues')
+    // Delete monthly fees
+    await db('monthly_fees')
       .where({ student_id: studentId })
       .del();
 
