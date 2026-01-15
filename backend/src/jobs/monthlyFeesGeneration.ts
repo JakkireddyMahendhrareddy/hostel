@@ -206,11 +206,15 @@ const generateMonthlyFeesForHostel = async (hostel_id: number, fee_month: string
 };
 
 export const startMonthlyFeesGenerationJob = () => {
-  // Schedule: Run at 12:05 AM on the 1st of every month (after old dues generation)
+  // TESTING MODE: Run every hour at minute 5
+  // Cron pattern: '5 * * * *'
+  // minute(5) hour(*=every) day(*=every) month(*=every) dayOfWeek(*=any)
+  //
+  // PRODUCTION MODE: Run at 12:05 AM on the 1st of every month
   // Cron pattern: '5 0 1 * *'
   // minute(5) hour(0=midnight) day(1=first) month(*=every) dayOfWeek(*=any)
 
-  const job = cron.schedule('5 0 1 * *', async () => {
+  const job = cron.schedule('5 * * * *', async () => {
     console.log('===========================================');
     console.log('[Monthly Fees Cron] Generation Started');
     console.log('[Monthly Fees Cron] Time:', new Date().toISOString());
@@ -257,7 +261,7 @@ export const startMonthlyFeesGenerationJob = () => {
     }
   });
 
-  console.log('✓ Monthly fees generation cron job scheduled (1st of each month at 12:05 AM IST)');
+  console.log('✓ Monthly fees generation cron job scheduled (TESTING MODE: Every hour at minute 5)');
 
   return job;
 };
