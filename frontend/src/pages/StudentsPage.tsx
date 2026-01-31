@@ -770,12 +770,12 @@ export const StudentsPage: React.FC = () => {
       present_working_address: formData.present_working_address || null,
       id_proof_type: formData.id_proof_type || null,
       id_proof_number: formData.id_proof_number || null,
-      id_proof_status: formData.id_proof_status === 'Submitted' || formData.id_proof_status === 1 ? 1 : 0,
+      id_proof_status: formData.id_proof_status === 1 ? 1 : 0,
       admission_date: formData.admission_date,
       admission_fee: parseFloat(formData.admission_fee) || 0,
-      admission_status: formData.admission_status === 'Paid' || formData.admission_status === 1 ? 1 : 0,
+      admission_status: formData.admission_status === 1 ? 1 : 0,
       due_date: formData.due_date || null,
-      status: formData.status === 'Active' || formData.status === 1 ? 1 : 0,
+      status: formData.status === 1 ? 1 : 0,
       room_id: formData.room_id ? parseInt(formData.room_id) : null,
       floor_number: formData.floor_number
         ? parseInt(formData.floor_number)
