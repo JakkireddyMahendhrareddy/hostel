@@ -23,12 +23,25 @@ import { startMonthlyFeesGenerationJob } from './jobs/monthlyFeesGeneration.js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 8081;
+const PORT = parseInt(process.env.PORT || '8081', 10);
+const HOST = process.env.HOST || '0.0.0.0';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Get allowed origins from environment or use defaults
+const getAllowedOrigins = (): string[] => {
+  if (process.env.ALLOWED_ORIGINS) {
+    return process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim());
+  }
+  // Development defaults
+  return NODE_ENV === 'production'
+    ? []
+    : ['http://localhost:3000', 'http://localhost:5173'];
+};
 
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:5173'],
+  origin: getAllowedOrigins(),
   credentials: true,
 }));
 app.use(express.json());
@@ -90,10 +103,14 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📚 API docs available at http://localhost:${PORT}/api`);
-  console.log(`🔐 Environment: ${process.env.NODE_ENV || 'development'}`);
+app.listen(PORT, HOST, () => {
+  const serverAddress = NODE_ENV === 'production'
+    ? `Port ${PORT}`
+    : `http://localhost:${PORT}`;
+
+  console.log(`🚀 Server running on ${serverAddress}`);
+  console.log(`🔐 Environment: ${NODE_ENV}`);
+  console.log(`📍 Listening on ${HOST}:${PORT}`);
 
   // Start cron jobs
   startMonthlyFeesGenerationJob();

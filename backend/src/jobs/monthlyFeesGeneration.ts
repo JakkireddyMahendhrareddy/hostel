@@ -206,18 +206,30 @@ const generateMonthlyFeesForHostel = async (hostel_id: number, fee_month: string
 };
 
 export const startMonthlyFeesGenerationJob = () => {
-  // TESTING MODE: Run every hour at minute 5
+  // AWS Deployment Notes:
+  // - Cron times are in UTC (default on AWS)
+  // - For reliable scheduling, consider using AWS CloudWatch Events instead
+  // - This in-process cron only runs when server instance is running
+  // - Server must NOT restart between scheduled times
+  //
+  // DEVELOPMENT MODE: Run every hour at minute 5
   // Cron pattern: '5 * * * *'
   // minute(5) hour(*=every) day(*=every) month(*=every) dayOfWeek(*=any)
   //
-  // PRODUCTION MODE: Run at 12:05 AM on the 1st of every month
+  // PRODUCTION MODE: Run at 12:05 AM UTC on the 1st of every month
   // Cron pattern: '5 0 1 * *'
   // minute(5) hour(0=midnight) day(1=first) month(*=every) dayOfWeek(*=any)
+  //
+  // To change timezone on AWS:
+  // 1. Set TZ environment variable: TZ=Asia/Kolkata npm start
+  // 2. Or use AWS CloudWatch Events for better reliability
 
-  const job = cron.schedule('5 * * * *', async () => {
+  const cronPattern = process.env.NODE_ENV === 'production' ? '5 0 1 * *' : '5 * * * *';
+  const job = cron.schedule(cronPattern, async () => {
     console.log('===========================================');
     console.log('[Monthly Fees Cron] Generation Started');
     console.log('[Monthly Fees Cron] Time:', new Date().toISOString());
+    console.log('[Monthly Fees Cron] Environment:', process.env.NODE_ENV || 'development');
     console.log('===========================================');
 
     try {
@@ -261,7 +273,13 @@ export const startMonthlyFeesGenerationJob = () => {
     }
   });
 
-  console.log('✓ Monthly fees generation cron job scheduled (TESTING MODE: Every hour at minute 5)');
+  const mode = process.env.NODE_ENV === 'production' ? 'PRODUCTION' : 'DEVELOPMENT';
+  const schedule = process.env.NODE_ENV === 'production'
+    ? 'Monthly (1st at 12:05 AM UTC)'
+    : 'Every hour at minute 5';
+
+  console.log(`✓ Monthly fees generation cron job scheduled (${mode} MODE: ${schedule})`);
+  console.log('⚠️  For AWS EC2: Consider using CloudWatch Events for production scheduling');
 
   return job;
 };
