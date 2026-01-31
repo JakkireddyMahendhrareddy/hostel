@@ -417,7 +417,7 @@ export const getMonthlyFeesSummary = async (req: AuthRequest, res: Response) => 
         's.floor_number',
         's.admission_date'
       )
-      .where('s.status', 'Active')
+      .where('s.status', 1)
       .whereNotNull('s.room_id')
       .whereNotNull('s.monthly_rent');
 
@@ -1953,6 +1953,74 @@ export const deletePayment = async (req: AuthRequest, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to delete payment',
+      details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+    });
+  }
+};
+
+// Get daily payment collections grouped by date
+export const getCollections = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    const { month } = req.query;
+
+    if (!month) {
+      return res.status(400).json({ success: false, error: 'Month parameter is required (YYYY-MM)' });
+    }
+
+    // Calculate date range
+    const [year, m] = (month as string).split('-').map(Number);
+    const startDate = `${year}-${String(m).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, m, 0).getDate();
+    const endDate = `${year}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    let query = db('fee_payments as fp')
+      .leftJoin('students as s', 'fp.student_id', 's.student_id')
+      .leftJoin('rooms as r', 's.room_id', 'r.room_id')
+      .leftJoin('payment_modes as pm', 'fp.payment_mode_id', 'pm.payment_mode_id')
+      .select(
+        'fp.payment_id',
+        'fp.amount',
+        'fp.payment_date',
+        'fp.receipt_number',
+        'fp.transaction_id',
+        'fp.notes',
+        'fp.created_at',
+        db.raw("CONCAT(s.first_name, ' ', COALESCE(s.last_name, '')) as student_name"),
+        'r.room_number',
+        'pm.payment_mode_name as payment_mode'
+      )
+      .whereBetween('fp.payment_date', [startDate, endDate]);
+
+    // Filter by hostel for owners
+    if (user?.role_id === 2) {
+      if (!user.hostel_id) {
+        return res.status(403).json({ success: false, error: 'Your account is not linked to any hostel.' });
+      }
+      query = query.where('fp.hostel_id', user.hostel_id);
+    }
+
+    const payments = await query.orderBy('fp.payment_date', 'desc').orderBy('fp.created_at', 'desc');
+
+    // Calculate summary
+    const totalAmount = payments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+
+    res.json({
+      success: true,
+      data: {
+        payments,
+        summary: {
+          total_amount: totalAmount,
+          total_count: payments.length,
+          month: month as string
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('Get collections error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch collections',
       details: process.env.NODE_ENV === 'development' ? error?.message : undefined
     });
   }

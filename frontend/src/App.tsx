@@ -18,6 +18,7 @@ import { MonthlyFeeManagementPage } from './pages/MonthlyFeeManagementPage';
 import { FeeDetailsPage } from './pages/FeeDetailsPage';
 import { IncomePage } from './pages/IncomePage';
 import { ExpensesPage } from './pages/ExpensesPage';
+import { CollectionsPage } from './pages/CollectionsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -191,6 +192,17 @@ function App() {
             }
           >
             <Route index element={<MonthlyFeeManagementPage />} />
+          </Route>
+
+          <Route
+            path="/owner/collections"
+            element={
+              <ProtectedRoute>
+                <MainLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<CollectionsPage />} />
           </Route>
 
           <Route

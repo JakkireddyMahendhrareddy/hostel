@@ -457,7 +457,7 @@ export const RoomsPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6 md:pt-2">
+    <div className="space-y-4">
       {/* Mobile Header */}
       <div className="md:hidden space-y-4">
         <div className="flex justify-between items-center">

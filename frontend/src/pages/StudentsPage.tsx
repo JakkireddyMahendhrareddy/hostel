@@ -3,6 +3,21 @@ import { Plus, Edit, Search, ChevronDown, ChevronUp, Eye, Users, X } from "lucid
 import api from "../services/api";
 import toast from "react-hot-toast";
 
+interface IdProofType {
+  id: number;
+  code: string;
+  name: string;
+  regex_pattern?: string;
+  min_length?: number;
+  max_length?: number;
+  display_order?: number;
+}
+
+interface GuardianRelation {
+  relation_id: number;
+  relation_name: string;
+}
+
 interface Student {
   student_id: number;
   hostel_id: number;
@@ -15,17 +30,17 @@ interface Student {
   email: string;
   guardian_name: string;
   guardian_phone: string;
-  guardian_relation: string;
+  guardian_relation: number | null;  // Changed to number (FK)
   permanent_address: string;
   present_working_address: string;
-  id_proof_type: string;
+  id_proof_type: number | null;  // Changed to number (FK)
   id_proof_number: string;
-  id_proof_status: "Submitted" | "Not Submitted";
+  id_proof_status: 0 | 1;  // Changed to TINYINT: 1=Submitted, 0=Not Submitted
   admission_date: string;
   admission_fee: number;
-  admission_status: "Paid" | "Unpaid";
+  admission_status: 0 | 1;  // Changed to TINYINT: 1=Paid, 0=Unpaid
   due_date: string;
-  status: "Active" | "Inactive";
+  status: 0 | 1;  // Changed to TINYINT: 1=Active, 0=Inactive
   room_id: number;
   room_number: string;
   floor_number: number;
@@ -51,17 +66,17 @@ interface StudentFormData {
   email: string;
   guardian_name: string;
   guardian_phone: string;
-  guardian_relation: string;
+  guardian_relation: number | string;  // Changed to number
   permanent_address: string;
   present_working_address: string;
-  id_proof_type: string;
+  id_proof_type: number | string;  // Changed to number
   id_proof_number: string;
-  id_proof_status: "Submitted" | "Not Submitted";
+  id_proof_status: 0 | 1;  // Changed to TINYINT: 1=Submitted, 0=Not Submitted
   admission_date: string;
   admission_fee: string;
-  admission_status: "Paid" | "Unpaid";
+  admission_status: 0 | 1;  // Changed to TINYINT: 1=Paid, 0=Unpaid
   due_date: string;
-  status: "Active" | "Inactive";
+  status: 0 | 1;  // Changed to TINYINT: 1=Active, 0=Inactive
   room_id: string;
   floor_number: string;
   monthly_rent: string;
@@ -71,10 +86,10 @@ export const StudentsPage: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"Active" | "Inactive" | "All">("Active");
+  const [statusFilter, setStatusFilter] = useState<0 | 1 | "All">(1);  // 1 = Active, 0 = Inactive
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [relations, setRelations] = useState<string[]>([]);
-  const [idProofTypes, setIdProofTypes] = useState<any[]>([]);
+  const [relations, setRelations] = useState<GuardianRelation[]>([]);
+  const [idProofTypes, setIdProofTypes] = useState<IdProofType[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
@@ -122,17 +137,17 @@ export const StudentsPage: React.FC = () => {
     email: "",
     guardian_name: "",
     guardian_phone: "",
-    guardian_relation: "Father",
+    guardian_relation: 1,  // Changed from "Father" to ID 1
     permanent_address: "",
     present_working_address: "",
-    id_proof_type: "Aadhar",
+    id_proof_type: 1,  // Changed from "Aadhar" to ID 1
     id_proof_number: "",
-    id_proof_status: "Not Submitted",
+    id_proof_status: 0,  // Changed: 1=Submitted, 0=Not Submitted
     admission_date: initialDates.admissionDate,
     admission_fee: "",
-    admission_status: "Unpaid",
+    admission_status: 0,  // Changed: 1=Paid, 0=Unpaid
     due_date: "",
-    status: "Active",
+    status: 1,  // Changed: 1=Active, 0=Inactive
     room_id: "",
     floor_number: "",
     monthly_rent: "",
@@ -173,10 +188,11 @@ export const StudentsPage: React.FC = () => {
 
   // Handle search - Enhanced to search across all columns
   // Combined filter function for search and status
-  const applyFilters = (searchValue: string = searchTerm, statusValue: "Active" | "Inactive" | "All" = statusFilter) => {
+  const applyFilters = (searchValue: string = searchTerm, statusValue: 0 | 1 | "All" = statusFilter) => {
     let filtered = students;
 
     // Apply status filter first
+    // statusValue: 1 = Active, 0 = Inactive, "All" = both
     if (statusValue !== "All") {
       filtered = filtered.filter((student) => student.status === statusValue);
     }
@@ -231,9 +247,14 @@ export const StudentsPage: React.FC = () => {
     applyFilters(value, statusFilter);
   };
 
-  const handleStatusFilter = (value: "Active" | "Inactive" | "All") => {
-    setStatusFilter(value);
-    applyFilters(searchTerm, value);
+  const handleStatusFilter = (value: 0 | 1 | "All" | string) => {
+    let filterValue: 0 | 1 | "All" = "All";
+    if (value === "Active" || value === "1") filterValue = 1;
+    else if (value === "Inactive" || value === "0") filterValue = 0;
+    else filterValue = "All";
+
+    setStatusFilter(filterValue);
+    applyFilters(searchTerm, filterValue);
   };
 
   // Pagination logic
@@ -308,7 +329,7 @@ export const StudentsPage: React.FC = () => {
       }, 0);
       
       const totalOccupied = rooms.reduce((sum: number, room: Room) => sum + (room.occupied_beds || 0), 0);
-      const totalStudents = allStudents.filter((s: Student) => s.status === "Active").length;
+      const totalStudents = allStudents.filter((s: Student) => s.status === 1).length;  // 1 = Active
       const remaining = totalCapacity - totalOccupied;
       
       setHostelStats({
@@ -333,23 +354,22 @@ export const StudentsPage: React.FC = () => {
     try {
       const response = await api.get("/relations");
       if (response.data.success && response.data.data) {
-        // Extract relation names from the response
-        const relationNames = response.data.data.map((rel: any) => rel.relation_name || rel.name);
-        setRelations(relationNames);
+        // Store full relation objects with IDs
+        setRelations(response.data.data);
       }
     } catch (error) {
       console.error("Fetch relations error:", error);
       // Fallback to default relations if API fails
       setRelations([
-        "Father",
-        "Mother",
-        "Brother",
-        "Sister",
-        "Uncle",
-        "Aunt",
-        "Grandfather",
-        "Grandmother",
-        "Other"
+        { relation_id: 1, relation_name: "Father" },
+        { relation_id: 2, relation_name: "Mother" },
+        { relation_id: 3, relation_name: "Brother" },
+        { relation_id: 4, relation_name: "Sister" },
+        { relation_id: 5, relation_name: "Uncle" },
+        { relation_id: 6, relation_name: "Aunt" },
+        { relation_id: 7, relation_name: "Grandfather" },
+        { relation_id: 8, relation_name: "Grandmother" },
+        { relation_id: 9, relation_name: "Other" }
       ]);
     }
   };
@@ -415,7 +435,7 @@ export const StudentsPage: React.FC = () => {
 
   // Helper function to get selected ID proof type validation rules
   const getIdProofTypeRules = () => {
-    return idProofTypes.find((type) => type.name === formData.id_proof_type);
+    return idProofTypes.find((type) => type.id == formData.id_proof_type);
   };
 
   const fetchHostelAdmissionFee = async () => {
@@ -605,10 +625,7 @@ export const StudentsPage: React.FC = () => {
       errors.last_name = "Last Name is required";
     }
 
-    // Date of Birth - Required
-    if (!formData.date_of_birth) {
-      errors.date_of_birth = "Date of Birth is required";
-    }
+
 
     // Gender - Validated by default value (always has value)
     // Phone - Required and exactly 10 digits
@@ -647,7 +664,7 @@ export const StudentsPage: React.FC = () => {
     }
 
     // Guardian Relation - Required
-    if (!formData.guardian_relation.trim()) {
+    if (!formData.guardian_relation || formData.guardian_relation === "") {
       errors.guardian_relation = "Guardian Relation is required";
     }
 
@@ -667,7 +684,7 @@ export const StudentsPage: React.FC = () => {
     } else if (formData.id_proof_type) {
       // Find the selected ID proof type to get validation rules
       const selectedType = idProofTypes.find(
-        (type) => type.name === formData.id_proof_type
+        (type) => type.id == formData.id_proof_type
       );
 
       console.log("🔍 ID Proof Validation Debug:", {
@@ -682,15 +699,14 @@ export const StudentsPage: React.FC = () => {
       if (selectedType) {
         const proofNumber = formData.id_proof_number.trim();
 
-        // Check length first
-        if (
-          proofNumber.length < selectedType.min_length ||
-          proofNumber.length > selectedType.max_length
-        ) {
-          errors.id_proof_number = `${selectedType.name} must be ${selectedType.min_length}-${selectedType.max_length} characters`;
-          console.log("❌ Length validation FAILED:", errors.id_proof_number);
+        // Check length validation if min/max are defined
+        if (selectedType.min_length !== undefined && selectedType.max_length !== undefined) {
+          if (proofNumber.length < selectedType.min_length || proofNumber.length > selectedType.max_length) {
+            errors.id_proof_number = `${selectedType.name} must be ${selectedType.min_length}-${selectedType.max_length} characters`;
+            console.log("❌ Length validation FAILED:", errors.id_proof_number);
+          }
         }
-        // Check regex pattern
+        // Check regex pattern if defined
         else if (selectedType.regex_pattern) {
           try {
             const regex = new RegExp(selectedType.regex_pattern);
@@ -699,13 +715,16 @@ export const StudentsPage: React.FC = () => {
               console.log("❌ Regex validation FAILED:", errors.id_proof_number);
             }
           } catch (e) {
-            // If regex pattern is invalid, just check length
             console.warn('⚠️ Invalid regex pattern:', selectedType.regex_pattern);
           }
         }
+        // If no validation rules defined, just require non-empty
+        else if (!proofNumber) {
+          errors.id_proof_number = `${selectedType.name} number is required`;
+        }
       } else {
         console.warn("⚠️ ID Proof Type NOT found in idProofTypes array. Looking for:", formData.id_proof_type);
-        console.warn("Available types:", idProofTypes.map(t => t.name));
+        console.warn("Available types:", idProofTypes.map(t => ({ id: t.id, name: t.name })));
       }
     }
 
@@ -722,6 +741,8 @@ export const StudentsPage: React.FC = () => {
     // - admission_status (default: "Unpaid")
     // - status (default: "Active")
 
+    console.log("🔴 Form Validation Errors:", errors);
+    console.log("🔴 Form Data:", formData);
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -749,12 +770,12 @@ export const StudentsPage: React.FC = () => {
       present_working_address: formData.present_working_address || null,
       id_proof_type: formData.id_proof_type || null,
       id_proof_number: formData.id_proof_number || null,
-      id_proof_status: formData.id_proof_status,
+      id_proof_status: formData.id_proof_status === 'Submitted' || formData.id_proof_status === 1 ? 1 : 0,
       admission_date: formData.admission_date,
       admission_fee: parseFloat(formData.admission_fee) || 0,
-      admission_status: formData.admission_status,
+      admission_status: formData.admission_status === 'Paid' || formData.admission_status === 1 ? 1 : 0,
       due_date: formData.due_date || null,
-      status: formData.status,
+      status: formData.status === 'Active' || formData.status === 1 ? 1 : 0,
       room_id: formData.room_id ? parseInt(formData.room_id) : null,
       floor_number: formData.floor_number
         ? parseInt(formData.floor_number)
@@ -776,11 +797,11 @@ export const StudentsPage: React.FC = () => {
       fetchRooms();
       handleCloseModal();
     } catch (error) {
-      const errorMessage =
-        (error as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error || "Failed to save student";
+      const respData = (error as any)?.response?.data;
+      const errorMessage = respData?.details || respData?.error || "Failed to save student";
       toast.error(errorMessage);
       console.error("Save student error:", error);
+      console.error("Server response:", respData);
     }
   };
 
@@ -813,16 +834,16 @@ export const StudentsPage: React.FC = () => {
       guardian_relation: student.guardian_relation || "Father",
       permanent_address: student.permanent_address || "",
       present_working_address: student.present_working_address || "",
-      id_proof_type: student.id_proof_type || "Aadhar",
+      id_proof_type: student.id_proof_type || 1,
       id_proof_number: student.id_proof_number || "",
-      id_proof_status: student.id_proof_status || "Not Submitted",
+      id_proof_status: student.id_proof_status || 0,  // 1=Submitted, 0=Not Submitted
       admission_date: formatDate(student.admission_date),
       admission_fee: student.admission_fee
         ? student.admission_fee.toString()
         : "",
-      admission_status: student.admission_status || "Unpaid",
+      admission_status: student.admission_status || 0,  // 1=Paid, 0=Unpaid
       due_date: student.due_date || "",
-      status: student.status || "Active",
+      status: student.status || 1,  // 1=Active, 0=Inactive
       room_id: student.room_id ? student.room_id.toString() : "",
       floor_number: student.floor_number ? student.floor_number.toString() : "",
       monthly_rent: student.monthly_rent ? student.monthly_rent.toString() : "",
@@ -843,17 +864,17 @@ export const StudentsPage: React.FC = () => {
       email: "",
       guardian_name: "",
       guardian_phone: "",
-      guardian_relation: "Father",
+      guardian_relation: 1,  // Default: Father (ID 1)
       permanent_address: "",
       present_working_address: "",
-      id_proof_type: "Aadhar",
+      id_proof_type: 1,  // Default: Aadhar (ID 1)
       id_proof_number: "",
-      id_proof_status: "Not Submitted",
+      id_proof_status: 0,  // 0 = Not Submitted
       admission_date: dates.admissionDate,
       admission_fee: "",
-      admission_status: "Unpaid",
+      admission_status: 0,  // 0 = Unpaid
       due_date: "",
-      status: "Active",
+      status: 1,  // 1 = Active
       room_id: "",
       floor_number: "",
       monthly_rent: "",
@@ -999,7 +1020,7 @@ export const StudentsPage: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex-shrink-0 ml-2 text-right">
-                      {student.admission_status === "Paid" ? (
+                      {student.admission_status === 1 ? (
                         <span className="px-2.5 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full">
                           Paid
                         </span>
@@ -1156,7 +1177,7 @@ export const StudentsPage: React.FC = () => {
                       : "-"}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-xs">
-                    {student.admission_status === "Paid" ? (
+                    {student.admission_status === 1 ? (
                       <span className="px-2 py-0.5 text-[10px] font-medium text-green-800 bg-green-100 rounded-full">
                         Paid
                       </span>
@@ -1256,10 +1277,10 @@ export const StudentsPage: React.FC = () => {
           Showing{" "}
           <span className="font-medium">{filteredStudents.length}</span> of{" "}
           <span className="font-medium">
-            {statusFilter === "Active"
-              ? students.filter(s => s.status === "Active").length
-              : statusFilter === "Inactive"
-              ? students.filter(s => s.status === "Inactive").length
+            {statusFilter === 1
+              ? students.filter(s => s.status === 1).length
+              : statusFilter === 0
+              ? students.filter(s => s.status === 0).length
               : students.length}
           </span>{" "}
           student{filteredStudents.length !== 1 ? "s" : ""}
@@ -1467,7 +1488,7 @@ export const StudentsPage: React.FC = () => {
                       <label className="block text-xs font-medium text-gray-500">
                         ID Proof Status
                       </label>
-                      {viewingStudent.id_proof_status === "Submitted" ? (
+                      {viewingStudent.id_proof_status === 1 ? (
                         <span className="px-2 py-0.5 text-[10px] font-medium text-green-800 bg-green-100 rounded-full inline-block">
                           Submitted
                         </span>
@@ -1535,7 +1556,7 @@ export const StudentsPage: React.FC = () => {
                       <label className="block text-xs font-medium text-gray-500">
                         Admission Status
                       </label>
-                      {viewingStudent.admission_status === "Paid" ? (
+                      {viewingStudent.admission_status === 1 ? (
                         <span className="px-2 py-0.5 text-[10px] font-medium text-green-800 bg-green-100 rounded-full">
                           Paid
                         </span>
@@ -1844,8 +1865,8 @@ export const StudentsPage: React.FC = () => {
                       >
                         <option value="">Select Relation</option>
                         {relations.map((relation) => (
-                          <option key={relation} value={relation}>
-                            {relation}
+                          <option key={relation.relation_id} value={relation.relation_id}>
+                            {relation.relation_name}
                           </option>
                         ))}
                       </select>
@@ -1909,7 +1930,7 @@ export const StudentsPage: React.FC = () => {
                       >
                         <option value="">Select ID Proof Type</option>
                         {idProofTypes.map((type) => (
-                          <option key={type.id} value={type.name}>
+                          <option key={type.id} value={type.id}>
                             {type.name}
                           </option>
                         ))}
@@ -2306,8 +2327,8 @@ export const StudentsPage: React.FC = () => {
                       >
                         <option value="">Select Relation</option>
                         {relations.map((relation) => (
-                          <option key={relation} value={relation}>
-                            {relation}
+                          <option key={relation.relation_id} value={relation.relation_id}>
+                            {relation.relation_name}
                           </option>
                         ))}
                       </select>
@@ -2371,7 +2392,7 @@ export const StudentsPage: React.FC = () => {
                       >
                         <option value="">Select ID Proof Type</option>
                         {idProofTypes.map((type) => (
-                          <option key={type.id} value={type.name}>
+                          <option key={type.id} value={type.id}>
                             {type.name}
                           </option>
                         ))}

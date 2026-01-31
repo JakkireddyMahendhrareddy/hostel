@@ -11,7 +11,8 @@ import {
   Menu,
   X,
   TrendingUp,
-  User
+  User,
+  CreditCard
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { Tooltip } from '../ui/Tooltip';
@@ -62,6 +63,7 @@ export const MainLayout: React.FC = () => {
         { name: 'Rooms', href: '/owner/rooms', icon: Building2 },
         { name: 'Students', href: '/owner/students', icon: Users },
         { name: 'Monthly Fees', href: '/owner/monthly-fees', icon: DollarSign },
+        { name: 'Collections', href: '/owner/collections', icon: CreditCard },
         { name: 'Income', href: '/owner/income', icon: TrendingUp },
         { name: 'Expenses', href: '/owner/expenses', icon: FileText },
         { name: 'Reports', href: '/owner/reports', icon: FileText },

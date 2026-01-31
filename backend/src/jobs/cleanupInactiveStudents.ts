@@ -24,7 +24,7 @@ export const cleanupInactiveStudents = async () => {
 
     // Find inactive students older than 1 month
     const studentsToDelete = await db('students')
-      .where('status', 'Inactive')
+      .where('status', 0)
       .where('inactive_date', '<=', oneMonthAgo)
       .select('student_id', 'first_name', 'last_name', 'inactive_date');
 

@@ -28,13 +28,13 @@ export const StatCard: React.FC<StatCardProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-gray-600">{title}</p>
+          <p className="mt-1 text-lg font-bold text-gray-900 truncate">{value}</p>
           {trend && (
-            <p className="mt-2 text-sm">
+            <p className="mt-1 text-xs">
               <span
                 className={`font-medium ${
                   trend.isPositive ? 'text-green-600' : 'text-red-600'
@@ -46,8 +46,8 @@ export const StatCard: React.FC<StatCardProps> = ({
             </p>
           )}
         </div>
-        <div className={`${colorClasses[color]} p-3 rounded-lg`}>
-          <Icon className="h-8 w-8 text-white" />
+        <div className={`${colorClasses[color]} p-2 rounded-lg flex-shrink-0`}>
+          <Icon className="h-5 w-5 text-white" />
         </div>
       </div>
     </div>

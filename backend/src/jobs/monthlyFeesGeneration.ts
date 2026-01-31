@@ -42,7 +42,7 @@ const generateMonthlyFeesForHostel = async (hostel_id: number, fee_month: string
           .andOn('ra.is_current', '=', db.raw('1'));
       })
       .where('s.hostel_id', hostel_id)
-      .where('s.status', 'Active')
+      .where('s.status', 1)
       .select(
         's.student_id',
         's.hostel_id',

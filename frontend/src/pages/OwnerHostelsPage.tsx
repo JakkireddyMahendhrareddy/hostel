@@ -74,7 +74,7 @@ export const OwnerHostelsPage: React.FC = () => {
       const response = await api.get(`/students?hostel_id=${hostel?.hostel_id}`);
       const students = response.data.data || [];
       // Count only active students
-      const activeCount = students.filter((s: any) => s.status === 'Active').length;
+      const activeCount = students.filter((s: any) => s.status === 1).length;
       setActiveStudents(activeCount);
     } catch (error) {
       console.error('Failed to fetch students count:', error);

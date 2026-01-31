@@ -54,7 +54,7 @@ export const getRecentActivity = async (req: AuthRequest, res: Response) => {
         'r.room_number',
         's.created_at'
       )
-      .where('s.status', 'Active')
+      .where('s.status', 1)
       .whereNotNull('s.room_id')
       .orderBy('s.created_at', 'desc')
       .limit(5);

@@ -14,7 +14,8 @@ import {
   editCurrentMonthFee,
   getAvailableMonths,
   updatePayment,
-  deletePayment
+  deletePayment,
+  getCollections
 } from '../controllers/monthlyFeeController.js';
 
 const router = express.Router();
@@ -24,6 +25,9 @@ router.use(authMiddleware);
 
 // Get all monthly fees for a specific student
 router.get('/student/:studentId', getMonthlyFees);
+
+// Get daily payment collections grouped by date
+router.get('/collections', getCollections);
 
 // Get summary for current month (all students)
 router.get('/summary', getMonthlyFeesSummary);

@@ -28,7 +28,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       `),
 
       // Total Students
-      db.raw(`SELECT COUNT(*) as total_students FROM students WHERE status = 'Active'`),
+      db.raw(`SELECT COUNT(*) as total_students FROM students WHERE status = 1`),
 
       // Recent Hostels (Last 5)
       db.raw(`

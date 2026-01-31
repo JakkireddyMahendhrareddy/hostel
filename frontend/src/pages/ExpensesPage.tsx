@@ -79,13 +79,11 @@ export const ExpensesPage: React.FC = () => {
   const fetchExpenses = async () => {
     try {
       setLoading(true);
-      // Calculate start and end dates for the selected month
+      // Calculate start and end dates for the selected month (avoid timezone shift)
       const [year, month] = selectedMonth.split('-').map(Number);
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0); // Last day of the month
-      
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
+      const lastDay = new Date(year, month, 0).getDate();
+      const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+      const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
       
       const response = await api.get('/expenses', {
         params: {
@@ -334,7 +332,7 @@ export const ExpensesPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="space-y-4">
         {/* Mobile: Single Line Header with Month */}
@@ -344,19 +342,12 @@ export const ExpensesPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Month:</label>
-            <div className="relative inline-block">
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                style={{ fontSize: '16px', zIndex: 10 }}
-              />
-              <div className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg bg-white pointer-events-none flex items-center gap-1.5 min-w-[5rem]">
-                <span>{formatMonthDisplay(selectedMonth)}</span>
-                <span className="text-gray-500">📅</span>
-              </div>
-            </div>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
           </div>
         </div>
 
@@ -392,20 +383,13 @@ export const ExpensesPage: React.FC = () => {
 
             {/* Month Picker */}
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Month:</label>
-              <div className="relative inline-block cursor-pointer">
-                <input
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
-                  style={{ fontSize: '16px', zIndex: 30, margin: 0, padding: 0 }}
-                />
-                <div className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white pointer-events-none flex items-center gap-1.5 whitespace-nowrap select-none">
-                  <span>{formatMonthDisplay(selectedMonth)}</span>
-                  <span className="text-gray-500">📅</span>
-                </div>
-              </div>
+              <label className="text-xs font-medium text-gray-600 whitespace-nowrap">Month:</label>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
             </div>
 
             {/* Total Expenses Card */}
