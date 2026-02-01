@@ -25,28 +25,16 @@ const generateMonthlyFeesForHostel = async (hostel_id: number, fee_month: string
   try {
     console.log(`[Monthly Fees Cron] Generating fees for hostel ${hostel_id}, month: ${fee_month}`);
 
-    // Check if fees already generated for this month
-    const existing = await db('monthly_fees')
-      .where({ hostel_id, fee_month })
-      .first();
-
-    if (existing) {
-      console.log(`[Monthly Fees Cron] Fees already exist for hostel ${hostel_id}, month: ${fee_month}`);
-      return { skipped: true, reason: 'already_exists' };
-    }
-
     // Get all active students with current room allocations
     const students: Student[] = await db('students as s')
-      .join('room_allocations as ra', function () {
-        this.on('s.student_id', '=', 'ra.student_id')
-          .andOn('ra.is_current', '=', db.raw('1'));
-      })
       .where('s.hostel_id', hostel_id)
       .where('s.status', 1)
+      .whereNotNull('s.room_id')
+      .whereNotNull('s.monthly_rent')
       .select(
         's.student_id',
         's.hostel_id',
-        'ra.monthly_rent'
+        's.monthly_rent'
       );
 
     if (students.length === 0) {
@@ -77,6 +65,16 @@ const generateMonthlyFeesForHostel = async (hostel_id: number, fee_month: string
     // For each student, create or update monthly fee record
     for (const student of students) {
       try {
+        // Skip if fee already exists for this student + month
+        const existingFee = await db('monthly_fees')
+          .where({ student_id: student.student_id, fee_month })
+          .first();
+
+        if (existingFee) {
+          console.log(`[Monthly Fees Cron] Fee already exists for student ${student.student_id}, month: ${fee_month}, skipping`);
+          continue;
+        }
+
         // Step 1: Get carry-forward from IMMEDIATE previous month only
         // We only look at the previous month because its balance already includes
         // any unpaid amounts from earlier months (avoiding double-counting)
@@ -94,24 +92,65 @@ const generateMonthlyFeesForHostel = async (hostel_id: number, fee_month: string
         // Calculate carry forward from previous month's ACTUAL unpaid balance
         // Formula: carry_forward = max(total_due - total_paid, 0)
         // This correctly handles Pending, Partially Paid, and Fully Paid statuses
+        // Walk backwards to find latest fee record and accumulate unpaid months
         let carryForward = 0;
+        const studentData = await db('students')
+          .where('student_id', student.student_id)
+          .select('admission_date')
+          .first();
+
+        const admDate = studentData?.admission_date ? new Date(studentData.admission_date) : null;
+        const studentRent = student.monthly_rent || 0;
+
         if (prevMonthFee) {
-          // Try to recalculate from actual payments in fee_payments table
           const payments = await db('fee_payments')
             .where('fee_id', prevMonthFee.fee_id)
             .sum('amount as total');
 
           const paymentsSum = parseFloat(payments[0]?.total || 0);
-
-          // IMPORTANT: If no payments found in fee_payments table, use stored paid_amount as fallback
-          // This handles cases where payments were recorded directly in monthly_fees (legacy/manual)
           const storedPaidAmount = parseFloat(prevMonthFee.paid_amount || 0);
           const actualPaid = paymentsSum > 0 ? paymentsSum : storedPaidAmount;
-
           const totalDue = parseFloat(prevMonthFee.total_due || 0);
           carryForward = Math.max(0, totalDue - actualPaid);
 
           console.log(`[Monthly Fees Cron] Student ${student.student_id}: prevMonth totalDue=${totalDue}, paymentsSum=${paymentsSum}, storedPaid=${storedPaidAmount}, carryForward=${carryForward}`);
+        } else if (admDate) {
+          // No fee record — walk backwards to find latest record or admission
+          let [cY, cM] = prevMonthStr.split('-').map(Number);
+          let accumulated = 0;
+
+          for (let i = 0; i < 24; i++) {
+            const cMonthStr = `${cY}-${String(cM).padStart(2, '0')}`;
+            const cMonthEnd = new Date(cY, cM, 0);
+
+            if (admDate > cMonthEnd) break;
+
+            const rec = await db('monthly_fees')
+              .where({ student_id: student.student_id, fee_month: cMonthStr })
+              .first();
+
+            if (rec) {
+              const payments = await db('fee_payments')
+                .where('fee_id', rec.fee_id)
+                .sum('amount as total');
+              const pSum = parseFloat(payments[0]?.total || 0);
+              const sPaid = parseFloat(rec.paid_amount || 0);
+              const aPaid = pSum > 0 ? pSum : sPaid;
+              const tDue = parseFloat(rec.total_due || 0);
+              carryForward = Math.max(0, tDue - aPaid) + accumulated;
+              console.log(`[Monthly Fees Cron] Student ${student.student_id}: Found record at ${cMonthStr}, balance=${tDue - aPaid}, accumulated=${accumulated}, carryForward=${carryForward}`);
+              break;
+            }
+
+            accumulated += studentRent;
+            cM--;
+            if (cM === 0) { cM = 12; cY--; }
+          }
+
+          if (carryForward === 0 && accumulated > 0) {
+            carryForward = accumulated;
+            console.log(`[Monthly Fees Cron] Student ${student.student_id}: No records found, accumulated=${carryForward}`);
+          }
         }
         if (carryForward > 0) totalCarryForward++;
 
@@ -180,9 +219,31 @@ const generateMonthlyFeesForHostel = async (hostel_id: number, fee_month: string
       }
     }
 
-    // Insert all fees at once
+    // Insert fees inside a transaction for atomicity
     if (feesData.length > 0) {
-      await db('monthly_fees').insert(feesData);
+      const trx = await db.transaction();
+      try {
+        for (const feeRecord of feesData) {
+          await trx('monthly_fees').insert(feeRecord);
+        }
+        await trx.commit();
+      } catch (insertErr) {
+        await trx.rollback();
+        console.error(`[Monthly Fees Cron] Bulk insert failed for hostel ${hostel_id}, retrying per-student...`, insertErr);
+        // Fallback: insert individually, skip duplicates
+        for (const feeRecord of feesData) {
+          try {
+            const exists = await db('monthly_fees')
+              .where({ student_id: feeRecord.student_id, fee_month: feeRecord.fee_month })
+              .first();
+            if (!exists) {
+              await db('monthly_fees').insert(feeRecord);
+            }
+          } catch (singleErr) {
+            console.error(`[Monthly Fees Cron] Failed to insert fee for student ${feeRecord.student_id}:`, singleErr);
+          }
+        }
+      }
     }
 
     console.log(`[Monthly Fees Cron] ✓ Fees generated for hostel ${hostel_id}:`, {
