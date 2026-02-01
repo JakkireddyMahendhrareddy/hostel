@@ -144,7 +144,6 @@ export const createStudent = async (req: AuthRequest, res: Response) => {
       admission_date,
       admission_fee,
       admission_status,
-      due_date,
       status,
       room_id,
       floor_number
@@ -177,16 +176,38 @@ export const createStudent = async (req: AuthRequest, res: Response) => {
     }
 
     // Validate required fields
-    if (!first_name || !phone || !guardian_phone || !admission_date || !gender || admission_fee === undefined || !admission_status) {
+    if (!first_name || !phone || !guardian_phone || !admission_date || !gender || admission_fee === undefined || admission_status === undefined || admission_status === null) {
       return res.status(400).json({
         success: false,
         error: 'Required fields: first_name, gender, phone, guardian_phone, admission_date, admission_fee, admission_status'
       });
     }
 
-    // Check if phone already exists
+    // Validate id_proof_type if provided
+    if (id_proof_type) {
+      const proofType = await db('id_proof_types').where({ id: id_proof_type }).first();
+      if (!proofType) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid id_proof_type: ${id_proof_type}. Must be a valid ID from id_proof_types table.`
+        });
+      }
+    }
+
+    // Validate guardian_relation if provided
+    if (guardian_relation) {
+      const relation = await db('relations_master').where({ relation_id: guardian_relation }).first();
+      if (!relation) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid guardian_relation: ${guardian_relation}. Must be a valid ID from relations_master table.`
+        });
+      }
+    }
+
+    // Check if phone already exists (status = 1 means Active)
     const existingStudent = await db('students')
-      .where({ phone, status: 'Active' })
+      .where({ phone, status: 1 })
       .first();
 
     if (existingStudent) {
@@ -224,6 +245,7 @@ export const createStudent = async (req: AuthRequest, res: Response) => {
     }
 
     // Insert student
+    // Convert boolean/status values: id_proof_status, admission_status, status are now TINYINT (0/1)
     const [student_id] = await db('students').insert({
       hostel_id,
       first_name,
@@ -239,21 +261,21 @@ export const createStudent = async (req: AuthRequest, res: Response) => {
       present_working_address,
       id_proof_type,
       id_proof_number,
-      id_proof_status: id_proof_status || 'Not Submitted',
+      id_proof_status: typeof id_proof_status === 'number' ? id_proof_status : (id_proof_status === 'Submitted' ? 1 : 0),
       admission_date: convertToDateOnly(admission_date),
       admission_fee: admission_fee || 0,
-      admission_status: admission_status || 'Unpaid',
-      due_date: convertToDateOnly(due_date),
-      status: status || 'Active',
+      admission_status: typeof admission_status === 'number' ? admission_status : (admission_status === 'Paid' ? 1 : 0),
+      status: typeof status === 'number' ? status : (status === 'Active' ? 1 : 0),
       floor_number: floor_number || null,
       created_at: new Date()
     });
 
     // If room allocation provided, update student record directly
     if (room_id && roomDetails) {
-      const studentStatus = status || 'Active'; // Default to Active if not specified
+      // Convert status to number: 1 = Active, 0 = Inactive
+      const studentStatus = typeof status === 'number' ? status : (status === 'Active' ? 1 : 0);
       const monthlyRent = roomDetails.rent_per_bed;
-      
+
       // Update student with room information
       await db('students')
         .where({ student_id })
@@ -263,15 +285,15 @@ export const createStudent = async (req: AuthRequest, res: Response) => {
           updated_at: new Date()
         });
 
-      // Update room occupied beds ONLY if student is Active
-      if (studentStatus === 'Active') {
+      // Update room occupied beds ONLY if student is Active (status = 1)
+      if (studentStatus === 1) {
         await db('rooms')
           .where({ room_id })
           .increment('occupied_beds', 1);
       }
 
-      // Auto-create monthly fee for current month if student is Active and has room
-      if (studentStatus === 'Active' && monthlyRent) {
+      // Auto-create monthly fee for current month if student is Active (status = 1) and has room
+      if (studentStatus === 1 && monthlyRent) {
         try {
           const now = new Date();
           const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -285,10 +307,7 @@ export const createStudent = async (req: AuthRequest, res: Response) => {
             .first();
 
           if (!existingFee) {
-            // Calculate due date (default to 15th of current month)
-            const dueDate = new Date(now.getFullYear(), now.getMonth(), 15);
-
-            // Create monthly fee record
+            // Create monthly fee record (due_date left NULL for owner to set manually)
             await db('monthly_fees').insert({
               student_id,
               hostel_id,
@@ -299,7 +318,7 @@ export const createStudent = async (req: AuthRequest, res: Response) => {
               paid_amount: 0.00,
               balance: monthlyRent,
               fee_status: 'Pending',
-              due_date: dueDate,
+              due_date: null,
               notes: 'Auto-created on student registration',
               created_at: new Date(),
               updated_at: new Date()
@@ -319,11 +338,12 @@ export const createStudent = async (req: AuthRequest, res: Response) => {
       message: 'Student registered successfully',
       data: { student_id }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Create student error:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to register student'
+      error: 'Failed to register student',
+      details: error?.message || String(error)
     });
   }
 };
@@ -348,7 +368,28 @@ export const updateStudent = async (req: AuthRequest, res: Response) => {
     // Store original values for room bed count management
     const oldStatus = student.status;
     const oldRoomId = student.room_id;
-    const newStatus = req.body.status !== undefined ? req.body.status : oldStatus;
+
+    // Validate id_proof_type if being updated
+    if (req.body.id_proof_type !== undefined && req.body.id_proof_type !== null) {
+      const proofType = await db('id_proof_types').where({ id: req.body.id_proof_type }).first();
+      if (!proofType) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid id_proof_type: ${req.body.id_proof_type}. Must be a valid ID from id_proof_types table.`
+        });
+      }
+    }
+
+    // Validate guardian_relation if being updated
+    if (req.body.guardian_relation !== undefined && req.body.guardian_relation !== null) {
+      const relation = await db('relations_master').where({ relation_id: req.body.guardian_relation }).first();
+      if (!relation) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid guardian_relation: ${req.body.guardian_relation}. Must be a valid ID from relations_master table.`
+        });
+      }
+    }
 
     // Allow updating specific fields
     const allowedFields = [
@@ -356,13 +397,13 @@ export const updateStudent = async (req: AuthRequest, res: Response) => {
       'guardian_name', 'guardian_phone', 'guardian_relation',
       'permanent_address', 'present_working_address',
       'id_proof_type', 'id_proof_number', 'id_proof_status',
-      'admission_date', 'admission_fee', 'admission_status', 'due_date', 'status', 'floor_number'
+      'admission_date', 'admission_fee', 'admission_status', 'status', 'floor_number'
     ];
 
     allowedFields.forEach(field => {
       if (req.body[field] !== undefined) {
         // Handle date fields - convert ISO datetime strings to date-only format
-        if (field === 'due_date' || field === 'admission_date' || field === 'date_of_birth') {
+        if (field === 'admission_date' || field === 'date_of_birth') {
           updateData[field] = convertToDateOnly(req.body[field]);
         } else {
           updateData[field] = req.body[field];
@@ -371,11 +412,15 @@ export const updateStudent = async (req: AuthRequest, res: Response) => {
     });
 
     // Handle status changes and inactive_date
+    // status is now stored as TINYINT: 1 = Active, 0 = Inactive
     if (req.body.status !== undefined) {
-      if (req.body.status === 'Inactive') {
+      const isInactive = req.body.status === 0 || req.body.status === 'Inactive';
+      const isActive = req.body.status === 1 || req.body.status === 'Active';
+
+      if (isInactive) {
         // Set inactive_date to current date when marking student as inactive
         // Only set if student was previously active (to avoid overwriting existing date)
-        if (oldStatus === 'Active') {
+        if (oldStatus === 1 || oldStatus === 'Active') {
           updateData.inactive_date = new Date();
         }
 
@@ -385,14 +430,18 @@ export const updateStudent = async (req: AuthRequest, res: Response) => {
           updateData.room_id = null;
           updateData.monthly_rent = null;
         }
-      } else if (req.body.status === 'Active') {
+        // Convert to 0
+        updateData.status = 0;
+      } else if (isActive) {
         // Clear inactive_date when reactivating student
         updateData.inactive_date = null;
 
         // If student was previously inactive, update admission_date to current date (re-admission)
-        if (oldStatus === 'Inactive') {
+        if (oldStatus === 0 || oldStatus === 'Inactive') {
           updateData.admission_date = new Date();
         }
+        // Convert to 1
+        updateData.status = 1;
       }
     }
 
@@ -403,7 +452,8 @@ export const updateStudent = async (req: AuthRequest, res: Response) => {
 
     // Handle room allocation changes if room_id is provided
     // BUT: Don't allow room assignment if student is being set to Inactive
-    if (room_id !== undefined && newStatus !== 'Inactive') {
+    const updateFinalStatus = updateData.status !== undefined ? updateData.status : oldStatus;
+    if (room_id !== undefined && updateFinalStatus !== 0) {
       if (!room_id) {
         // room_id is null or empty - remove room assignment
         updateData.room_id = null;
@@ -462,7 +512,11 @@ export const updateStudent = async (req: AuthRequest, res: Response) => {
     const finalRoomId = updatedStudent.room_id;
 
     // Handle bed count changes based on status and room changes
-    if (oldStatus === 'Active' && finalStatus === 'Inactive') {
+    // Status is now TINYINT: 1 = Active, 0 = Inactive
+    const oldStatusIsActive = oldStatus === 1 || oldStatus === 'Active';
+    const finalStatusIsActive = finalStatus === 1 || finalStatus === 'Active';
+
+    if (oldStatusIsActive && !finalStatusIsActive) {
       // Student became inactive - free up the bed
       if (oldRoomId) {
         try {
@@ -474,7 +528,7 @@ export const updateStudent = async (req: AuthRequest, res: Response) => {
           console.error('Error decrementing room occupied_beds:', bedError);
         }
       }
-    } else if (oldStatus === 'Inactive' && finalStatus === 'Active') {
+    } else if (!oldStatusIsActive && finalStatusIsActive) {
       // Student became active - add bed if room is assigned
       if (finalRoomId) {
         try {
@@ -486,7 +540,7 @@ export const updateStudent = async (req: AuthRequest, res: Response) => {
           console.error('Error incrementing room occupied_beds:', bedError);
         }
       }
-    } else if (finalStatus === 'Active') {
+    } else if (finalStatusIsActive) {
       // Student is active - handle room changes
       if (oldRoomId && finalRoomId && oldRoomId !== finalRoomId) {
         // Student changed rooms
@@ -562,7 +616,7 @@ export const deleteStudent = async (req: AuthRequest, res: Response) => {
     }
 
     // Only allow deletion of inactive students
-    if (student.status !== 'Inactive') {
+    if (student.status !== 0 && student.status !== 'Inactive') {
       return res.status(400).json({
         success: false,
         error: 'Only inactive students can be deleted. Please mark the student as inactive first.'
@@ -640,7 +694,8 @@ export const allocateRoom = async (req: AuthRequest, res: Response) => {
     }
 
     // Check if student is active (only active students count in room occupancy)
-    const isStudentActive = student.status === 'Active';
+    // status is TINYINT: 1 = Active, 0 = Inactive
+    const isStudentActive = student.status === 1 || student.status === 'Active';
     const oldRoomId = student.room_id;
 
     // If student had a previous room, decrement its occupied beds

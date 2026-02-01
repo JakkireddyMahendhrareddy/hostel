@@ -415,7 +415,7 @@ export const LandingPage: React.FC = () => {
                 onClick={() => setShowForgotPassword(true)}
                 className="text-blue-500 hover:text-blue-600 text-sm font-medium"
               >
-                Forgot password?
+                
               </button>
             </div>
 

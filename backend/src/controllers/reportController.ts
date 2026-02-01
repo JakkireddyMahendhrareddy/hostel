@@ -31,7 +31,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
 
     // Get total students (active)
     let studentsQuery = db('students')
-      .where('status', 'Active')
+      .where('status', 1)
       .count('* as count');
     if (hostelIds.length > 0) {
       studentsQuery = studentsQuery.whereIn('hostel_id', hostelIds);
@@ -63,7 +63,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
 
     // Get occupied beds - count active students with room_id (room_allocations table was removed)
     let occupiedBedsQuery = db('students')
-      .where('status', 'Active')
+      .where('status', 1)
       .whereNotNull('room_id')
       .count('* as count');
     if (hostelIds.length > 0) {
@@ -86,26 +86,26 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
     const lastDay = new Date(year, month, 0).getDate();
     const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-    // Get monthly income from fee payments
-    let feeIncomeQuery = db('fee_payments')
-      .whereBetween('payment_date', [monthStart, monthEnd])
-      .sum('amount as total');
-    if (hostelIds.length > 0) {
-      feeIncomeQuery = feeIncomeQuery.whereIn('hostel_id', hostelIds);
-    }
-    const feeIncome = await feeIncomeQuery.first();
-
-    // Get monthly income from income table
-    let otherIncomeQuery = db('income')
+    // Get monthly income from income table only (matches Income page)
+    let incomeQuery = db('income')
       .whereBetween('income_date', [monthStart, monthEnd])
       .sum('amount as total');
     if (hostelIds.length > 0) {
-      otherIncomeQuery = otherIncomeQuery.whereIn('hostel_id', hostelIds);
+      incomeQuery = incomeQuery.whereIn('hostel_id', hostelIds);
     }
-    const otherIncome = await otherIncomeQuery.first();
+    const monthlyIncome = await incomeQuery.first();
 
-    // Total monthly income = fee payments + other income
-    const totalMonthlyIncome = Number(feeIncome?.total || 0) + Number(otherIncome?.total || 0);
+    const totalMonthlyIncome = Number(monthlyIncome?.total || 0);
+
+    // Get fee collection for current month (from fee_payments table)
+    let feeCollectionQuery = db('fee_payments')
+      .whereBetween('payment_date', [monthStart, monthEnd])
+      .sum('amount as total')
+      .count('* as count');
+    if (hostelIds.length > 0) {
+      feeCollectionQuery = feeCollectionQuery.whereIn('hostel_id', hostelIds);
+    }
+    const feeCollection = await feeCollectionQuery.first();
 
     // Get monthly expenses
     let expensesQuery = db('expenses')
@@ -142,6 +142,8 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
         monthlyIncome: Number(income),
         monthlyExpenses: Number(expenses),
         netProfit: Number(netProfit),
+        feeCollection: Number(feeCollection?.total || 0),
+        feeCollectionCount: Number(feeCollection?.count || 0),
         pendingDuesCount: pendingDues?.count || 0,
         pendingDuesAmount: Number(pendingDues?.total || 0)
       }

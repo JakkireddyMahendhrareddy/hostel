@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Users, DollarSign, FileText, TrendingUp, AlertCircle } from 'lucide-react';
+import { Building2, Users, DollarSign, FileText, TrendingUp, AlertCircle, CreditCard } from 'lucide-react';
 import { StatCard } from '../components/ui/StatCard';
 import { Card } from '../components/ui/Card';
 import api from '../services/api';
@@ -16,6 +16,8 @@ interface DashboardStats {
   monthlyIncome: number;
   monthlyExpenses: number;
   netProfit: number;
+  feeCollection: number;
+  feeCollectionCount: number;
   pendingDuesCount: number;
   pendingDuesAmount: number;
 }
@@ -138,11 +140,10 @@ export const OwnerDashboard: React.FC = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-gray-900">Hostel Dashboard</h1>
-        <p className="text-gray-600">Hostel Owner Dashboard</p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           title="Total Rooms"
           value={stats.totalRooms}
@@ -154,6 +155,12 @@ export const OwnerDashboard: React.FC = () => {
           value={stats.totalStudents}
           icon={Users}
           color="green"
+        />
+        <StatCard
+          title="Fee Collection"
+          value={formatCurrency(stats.feeCollection)}
+          icon={CreditCard}
+          color="yellow"
         />
         <StatCard
           title="Monthly Income"

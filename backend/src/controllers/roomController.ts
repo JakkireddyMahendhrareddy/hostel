@@ -100,7 +100,7 @@ export const getRooms = async (req: AuthRequest, res: Response) => {
       // Count active students with this room_id
       const studentCount = await db('students')
         .where('room_id', room.room_id)
-        .where('status', 'Active')
+        .where('status', 1)
         .count('* as count')
         .first();
       
@@ -219,7 +219,7 @@ export const getRoomById = async (req: AuthRequest, res: Response) => {
     // Count active students with this room_id
     const studentCount = await db('students')
       .where('room_id', roomId)
-      .where('status', 'Active')
+      .where('status', 1)
       .count('* as count')
       .first();
     
@@ -452,7 +452,7 @@ export const deleteRoom = async (req: AuthRequest, res: Response) => {
 
     // Check if room has active students
     const students = await db('students')
-      .where({ room_id: roomId, status: 'Active' })
+      .where({ room_id: roomId, status: 1 })
       .count('* as count')
       .first();
 

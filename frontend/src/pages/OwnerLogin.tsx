@@ -142,7 +142,7 @@ export const OwnerLogin: React.FC = () => {
               to="/forgot-password"
               className="text-blue-600 hover:text-blue-700 font-medium"
             >
-              Forgot Password?
+              
             </Link>
           </div>
         </form>
