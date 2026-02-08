@@ -10,12 +10,12 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     // Redirect owners to /owner/dashboard if they access /dashboard
-    if (user?.role === 'Hostel Owner' && !window.location.pathname.startsWith('/owner/')) {
+    if (user?.role_id === 2 && !window.location.pathname.startsWith('/owner/')) {
       navigate('/owner/dashboard', { replace: true });
     }
   }, [user, navigate]);
 
-  if (user?.role === 'Main Admin') {
+  if (user?.role_id === 1) {
     return <AdminDashboard />;
   }
 

@@ -40,7 +40,7 @@ export const OwnerLogin: React.FC = () => {
 
         // Check if user is Hostel Owner
         const user = useAuthStore.getState().user;
-        if (user?.role !== 'Hostel Owner') {
+        if (user?.role_id !== 2) {
           toast.error('Access denied. This portal is for Hostel Owners only.');
           useAuthStore.getState().logout();
           setSubmitting(false);

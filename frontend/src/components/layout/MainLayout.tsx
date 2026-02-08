@@ -48,7 +48,7 @@ export const MainLayout: React.FC = () => {
     setShowLogoutConfirm(false);
   };
 
-  const isAdmin = user?.role === 'Main Admin';
+  const isAdmin = user?.role_id === 1;
 
   const navigation = isAdmin
     ? [

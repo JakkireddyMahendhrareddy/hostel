@@ -27,7 +27,7 @@ interface Amenity {
 export const AddHostelModal: React.FC<AddHostelModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'Main Admin';
+  const isAdmin = user?.role_id === 1;
   const [loading, setLoading] = useState(false);
   const [owners, setOwners] = useState<Owner[]>([]);
   const [amenitiesList, setAmenitiesList] = useState<Amenity[]>([]);

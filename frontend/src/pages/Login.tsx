@@ -37,9 +37,9 @@ export const Login: React.FC = () => {
         toast.success('Login successful!');
 
         const user = useAuthStore.getState().user;
-        if (user?.role === 'Main Admin') {
+        if (user?.role_id === 1) {
           navigate('/dashboard');
-        } else if (user?.role === 'Hostel Owner') {
+        } else if (user?.role_id === 2) {
           navigate('/owner/dashboard');
         } else {
           navigate('/dashboard');

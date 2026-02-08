@@ -87,9 +87,9 @@ export const LandingPage: React.FC = () => {
 
         toast.success(`Welcome, ${user?.full_name}!`);
 
-        if (user?.role === 'Main Admin') {
+        if (user?.role_id === 1) {
           navigate('/dashboard');
-        } else if (user?.role === 'Hostel Owner') {
+        } else if (user?.role_id === 2) {
           navigate('/owner/dashboard');
         } else {
           navigate('/dashboard');

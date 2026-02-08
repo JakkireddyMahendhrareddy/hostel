@@ -9,8 +9,8 @@ export const SettingsPage: React.FC = () => {
   const { user } = useAuthStore();
   const { theme, setThemeMode, setPrimaryColor, setFontSize, setFontFamily } = useTheme();
   
-  const isAdmin = user?.role === 'Main Admin';
-  const isOwner = user?.role === 'Hostel Owner';
+  const isAdmin = user?.role_id === 1;
+  const isOwner = user?.role_id === 2;
   const isOwnerSettings = location.pathname === '/owner/settings';
   const isAdminSettings = location.pathname === '/settings';
 

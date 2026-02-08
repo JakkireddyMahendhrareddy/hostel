@@ -40,7 +40,7 @@ export const AdminLogin: React.FC = () => {
 
         // Check if user is Main Admin
         const user = useAuthStore.getState().user;
-        if (user?.role !== 'Main Admin') {
+        if (user?.role_id !== 1) {
           toast.error('Access denied. This portal is for Main Admin only.');
           useAuthStore.getState().logout();
           setSubmitting(false);

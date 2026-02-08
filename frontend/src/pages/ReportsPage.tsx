@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 export const ReportsPage: React.FC = () => {
   const location = useLocation();
   const { user } = useAuthStore();
-  const isOwner = user?.role === 'Hostel Owner';
+  const isOwner = user?.role_id === 2;
   const isOwnerReports = location.pathname === '/owner/reports';
 
   // Default to current month in YYYY-MM format

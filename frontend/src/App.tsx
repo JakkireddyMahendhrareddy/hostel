@@ -48,7 +48,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 // Role-based Hostel Page Component
 const HostelPageRouter: React.FC = () => {
   const user = useAuthStore((state) => state.user);
-  const isAdmin = user?.role === 'Main Admin';
+  const isAdmin = user?.role_id === 1;
 
   return isAdmin ? <HostelsPage /> : <OwnerHostelsPage />;
 };

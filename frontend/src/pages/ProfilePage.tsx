@@ -33,7 +33,7 @@ export const ProfilePage: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
-    if (user?.role === 'Hostel Owner') {
+    if (user?.role_id === 2) {
       fetchHostel();
     } else {
       setLoading(false);
@@ -119,7 +119,7 @@ export const ProfilePage: React.FC = () => {
       </div>
 
       {/* Hostel Details Card - Only for Hostel Owners */}
-      {user.role === 'Hostel Owner' && (
+      {user.role_id === 2 && (
         <>
           {loading ? (
             <Card>
