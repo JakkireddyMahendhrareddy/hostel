@@ -93,11 +93,10 @@ export const createHostel = async (req: AuthRequest, res: Response) => {
     // Insert hostel
     const [hostel_id] = await db('hostel_master').insert(hostelData);
 
-    // Note: Owners can manage multiple hostels, so we don't update users.hostel_id
-    // The relationship is maintained through hostel_master.owner_id
-
-    // Note: Rooms need to be created separately with room_type_id, capacity, and rent_per_bed
-    // Auto-generation skipped as it requires additional room configuration
+    // Update owner's hostel_id in users table (single hostel per owner)
+    await db('users')
+      .where({ user_id: owner_id })
+      .update({ hostel_id });
 
     res.status(201).json({
       success: true,
@@ -333,8 +332,23 @@ export const updateHostel = async (req: AuthRequest, res: Response) => {
         });
       }
 
-      // Note: Owners can manage multiple hostels, so we don't restrict or update users.hostel_id
-      // The relationship is maintained through hostel_master.owner_id
+      // Update hostel_id for new owner
+      await db('users')
+        .where({ user_id: finalOwnerId })
+        .update({ hostel_id: hostelId });
+
+      // Clear hostel_id from old owner (if they have no other hostels)
+      const oldOwnerHostelCount = await db('hostel_master')
+        .where({ owner_id: existingHostel.owner_id, is_active: 1 })
+        .whereNot({ hostel_id: hostelId })
+        .count('hostel_id as count')
+        .first();
+
+      if (!oldOwnerHostelCount || Number(oldOwnerHostelCount.count) === 0) {
+        await db('users')
+          .where({ user_id: existingHostel.owner_id })
+          .update({ hostel_id: null });
+      }
     }
 
     // Prepare update data
@@ -419,6 +433,18 @@ export const deleteHostel = async (req: AuthRequest, res: Response) => {
         is_active: 0,
         updated_at: new Date()
       });
+
+    // Clear hostel_id from owner if they have no other active hostels
+    const ownerHostelCount = await db('hostel_master')
+      .where({ owner_id: hostel.owner_id, is_active: 1 })
+      .count('hostel_id as count')
+      .first();
+
+    if (!ownerHostelCount || Number(ownerHostelCount.count) === 0) {
+      await db('users')
+        .where({ user_id: hostel.owner_id })
+        .update({ hostel_id: null });
+    }
 
     res.json({
       success: true,

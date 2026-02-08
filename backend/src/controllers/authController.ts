@@ -83,8 +83,9 @@ export const authController = {
             email: user.email,
             full_name: user.full_name,
             role: user.role_name,
+            role_id: user.role_id,
             phone: user.phone,
-            hostel_id: user.hostel_id, // Include in user response
+            hostel_id: user.hostel_id,
           },
           token,
         },
@@ -173,6 +174,7 @@ export const authController = {
           'users.email',
           'users.full_name',
           'users.phone',
+          'users.role_id',
           'users.hostel_id',
           'user_roles.role_name as role'
         )
