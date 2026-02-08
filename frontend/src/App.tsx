@@ -219,6 +219,7 @@ function App() {
           <Route
             path="/owner/income"
             element={
+              
               <ProtectedRoute>
                 <MainLayout />
               </ProtectedRoute>

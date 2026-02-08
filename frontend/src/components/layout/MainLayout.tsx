@@ -64,7 +64,7 @@ export const MainLayout: React.FC = () => {
         { name: 'Students', href: '/owner/students', icon: Users },
         { name: 'Monthly Fees', href: '/owner/monthly-fees', icon: DollarSign },
         { name: 'Collections', href: '/owner/collections', icon: CreditCard },
-        { name: 'Income', href: '/owner/income', icon: TrendingUp },
+        { name: 'Incomes', href: '/owner/income', icon: TrendingUp },
         { name: 'Expenses', href: '/owner/expenses', icon: FileText },
         { name: 'Reports', href: '/owner/reports', icon: FileText },
         { name: 'Settings', href: '/owner/settings', icon: Settings },
