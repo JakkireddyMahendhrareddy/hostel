@@ -542,8 +542,8 @@ export const RoomsPage: React.FC = () => {
       </div>
 
       {/* Mobile Card View - Expandable */}
-      <div className="block md:hidden space-y-3">
-        {currentRooms.length === 0 ? (
+      <div className="block md:hidden space-y-3 pb-24">
+        {filteredRooms.length === 0 ? (
           <div className="text-center py-12">
             <Home className="h-12 w-12 text-gray-300 mx-auto mb-4" />
             <p className="text-sm text-gray-500">
@@ -553,7 +553,7 @@ export const RoomsPage: React.FC = () => {
             </p>
           </div>
         ) : (
-          currentRooms.map((room) => {
+          filteredRooms.map((room) => {
             const isExpanded = expandedCardId === room.room_id;
             
             return (

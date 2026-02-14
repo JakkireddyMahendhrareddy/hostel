@@ -653,7 +653,7 @@ export const MonthlyFeeManagementPage: React.FC = () => {
 
 
       {/* Mobile Card View */}
-      <div className="block md:hidden space-y-3">
+      <div className="block md:hidden space-y-3 pb-24">
         {filteredFees.length === 0 && !loading ? (
           <div className="text-center py-12">
             <p className="text-gray-500">

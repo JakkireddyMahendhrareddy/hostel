@@ -921,7 +921,7 @@ export const StudentsPage: React.FC = () => {
 
           {/* Status Filter Dropdown */}
           <select
-            value={statusFilter}
+            value={statusFilter === 1 ? "Active" : statusFilter === 0 ? "Inactive" : "All"}
             onChange={(e) => handleStatusFilter(e.target.value as "Active" | "Inactive" | "All")}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm whitespace-nowrap"
           >
@@ -940,7 +940,7 @@ export const StudentsPage: React.FC = () => {
             Student Management
           </h1>
         </div>
-        
+
         {/* Right: Search, Status Filter, Add Student */}
         <div className="flex items-center gap-3">
           {/* Search Bar */}
@@ -957,7 +957,7 @@ export const StudentsPage: React.FC = () => {
 
           {/* Status Filter Dropdown */}
           <select
-            value={statusFilter}
+            value={statusFilter === 1 ? "Active" : statusFilter === 0 ? "Inactive" : "All"}
             onChange={(e) => handleStatusFilter(e.target.value as "Active" | "Inactive" | "All")}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
           >
@@ -981,7 +981,7 @@ export const StudentsPage: React.FC = () => {
       </div>
 
       {/* Mobile Card View */}
-      <div className="block md:hidden space-y-3">
+      <div className="block md:hidden space-y-3 pb-24">
         {filteredStudents.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500">
@@ -991,7 +991,7 @@ export const StudentsPage: React.FC = () => {
             </p>
           </div>
         ) : (
-          currentStudents.map((student) => {
+          filteredStudents.map((student) => {
             const isExpanded = expandedCardId === student.student_id;
             return (
               <div
