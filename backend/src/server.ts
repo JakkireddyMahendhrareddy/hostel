@@ -17,6 +17,8 @@ import activityRoutes from './routes/activityRoutes.js';
 import amenitiesRoutes from './routes/amenities.routes.js';
 import relationsRoutes from './routes/relationsRoutes.js';
 import idProofTypesRoutes from './routes/idProofTypesRoutes.js';
+import webhookKeyRoutes from './routes/webhookKeyRoutes.js';
+import webhookRoutes from './routes/webhookRoutes.js';
 import { startMonthlyFeesGenerationJob } from './jobs/monthlyFeesGeneration.js';
 
 // Load environment variables
@@ -66,6 +68,8 @@ app.use('/api/activity', activityRoutes);
 app.use('/api/amenities', amenitiesRoutes);
 app.use('/api/relations', relationsRoutes);
 app.use('/api/id-proof-types', idProofTypesRoutes);
+app.use('/api/webhook-keys', webhookKeyRoutes);
+app.use('/api/webhook', cors(), webhookRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
