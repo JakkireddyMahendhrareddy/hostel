@@ -12,7 +12,8 @@ import {
   X,
   TrendingUp,
   User,
-  CreditCard
+  CreditCard,
+  Globe
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { Tooltip } from '../ui/Tooltip';
@@ -67,6 +68,7 @@ export const MainLayout: React.FC = () => {
         { name: 'Incomes', href: '/owner/income', icon: TrendingUp },
         { name: 'Expenses', href: '/owner/expenses', icon: FileText },
         { name: 'Reports', href: '/owner/reports', icon: FileText },
+        { name: 'Google Form', href: '/owner/webhook-setup', icon: Globe },
         { name: 'Settings', href: '/owner/settings', icon: Settings },
       ];
 
@@ -163,6 +165,7 @@ export const MainLayout: React.FC = () => {
                  location.pathname === '/reports' || location.pathname === '/owner/reports' ? 'Reports' :
                  location.pathname === '/settings' || location.pathname === '/owner/settings' ? 'Settings' :
                  location.pathname === '/profile' || location.pathname === '/owner/profile' ? 'Profile' :
+                 location.pathname === '/owner/webhook-setup' ? 'Google Form Setup' :
                  'Dashboard'}
               </h1>
             </div>

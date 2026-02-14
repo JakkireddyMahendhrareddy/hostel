@@ -23,6 +23,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { WebhookSetupPage } from './pages/WebhookSetupPage';
 
 // Create Query Client
 const queryClient = new QueryClient({
@@ -270,6 +271,17 @@ function App() {
             }
           >
             <Route index element={<ProfilePage />} />
+          </Route>
+
+          <Route
+            path="/owner/webhook-setup"
+            element={
+              <ProtectedRoute>
+                <MainLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<WebhookSetupPage />} />
           </Route>
 
           {/* Redirect old owner paths to new /owner/* paths */}
