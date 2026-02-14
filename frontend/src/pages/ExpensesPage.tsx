@@ -450,7 +450,7 @@ export const ExpensesPage: React.FC = () => {
         ) : (
           <>
             {/* Mobile Card View - Expandable */}
-            <div className="block md:hidden space-y-3">
+            <div className="block md:hidden space-y-3 pb-24">
               {filteredExpenses.length === 0 ? (
                 <div className="text-center py-8">
                   <Search className="h-12 w-12 text-gray-300 mx-auto mb-3" />
@@ -458,7 +458,7 @@ export const ExpensesPage: React.FC = () => {
                   <p className="text-xs text-gray-400 mt-1">Try adjusting your search query</p>
                 </div>
               ) : (
-                currentExpenses.map((expense) => {
+                filteredExpenses.map((expense) => {
                   const isExpanded = expandedCardId === expense.expense_id;
                   
                   return (
