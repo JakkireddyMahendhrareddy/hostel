@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { authService, User } from '../services/auth';
 
 interface AuthState {
@@ -9,7 +9,7 @@ interface AuthState {
   login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: User | null) => void;
-  initializeAuth: () => Promise<void>;
+  initializeAuth: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -45,57 +45,18 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      initializeAuth: async () => {
-        // Use sessionStorage for tab-independent sessions
-        const token = sessionStorage.getItem('authToken');
-        const storedUser = authService.getStoredUser();
-
-        if (!token || !storedUser) {
-          set({
-            user: null,
-            isAuthenticated: false,
-            isLoading: false,
-          });
-          return;
-        }
-
-        // Verify token matches stored user by fetching current user from backend
-        try {
-          const currentUser = await authService.getCurrentUser();
-
-          // Check if stored user matches current user from token
-          if (currentUser.user_id === storedUser.user_id && currentUser.role_id === storedUser.role_id) {
-            set({
-              user: currentUser,
-              isAuthenticated: true,
-              isLoading: false,
-            });
-            // Update stored user to ensure it's in sync
-            sessionStorage.setItem('user', JSON.stringify(currentUser));
-          } else {
-            // Mismatch - clear and logout
-            await authService.logout();
-            set({
-              user: null,
-              isAuthenticated: false,
-              isLoading: false,
-            });
-          }
-        } catch (error) {
-          // Token invalid or expired
-          await authService.logout();
-          set({
-            user: null,
-            isAuthenticated: false,
-            isLoading: false,
-          });
-        }
+      initializeAuth: () => {
+        const user = authService.getStoredUser();
+        const isAuthenticated = authService.isAuthenticated();
+        set({
+          user,
+          isAuthenticated,
+          isLoading: false,
+        });
       },
     }),
     {
-      name: 'hostel-auth-storage',
-      // Use sessionStorage instead of localStorage for tab-independent sessions
-      storage: createJSONStorage(() => sessionStorage),
+      name: 'hostel-auth-storage', // unique name for localStorage key
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
@@ -103,5 +64,3 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
-
-// No cross-tab sync listener - each tab maintains its own independent session

@@ -48,7 +48,7 @@ export const OwnerLogin: React.FC = () => {
         }
 
         toast.success('Welcome, Hostel Owner!');
-        navigate('/owner/dashboard');
+        navigate('/dashboard');
       } catch (error: any) {
         toast.error(error.response?.data?.error || 'Invalid credentials');
       } finally {
@@ -142,7 +142,7 @@ export const OwnerLogin: React.FC = () => {
               to="/forgot-password"
               className="text-blue-600 hover:text-blue-700 font-medium"
             >
-              
+              Forgot Password?
             </Link>
           </div>
         </form>
