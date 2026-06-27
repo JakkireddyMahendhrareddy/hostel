@@ -182,3 +182,37 @@ code {
 .theme-text {
   color: var(--text-color);
 }
+
+/* ============================================================
+   Functional settings options (toggled via root classes by ThemeContext)
+   ============================================================ */
+
+/* Reduce Motion — kill animations/transitions */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* High Contrast — stronger borders/text */
+html.high-contrast {
+  --border-color: #000000;
+}
+html.high-contrast.dark {
+  --border-color: #ffffff;
+}
+html.high-contrast body {
+  filter: contrast(1.15);
+}
+
+/* Compact Mode — tighten spacing in the main content area */
+html.compact main .p-4 { padding: 0.5rem !important; }
+html.compact main .p-6 { padding: 0.875rem !important; }
+html.compact main .sm\:p-6 { padding: 0.875rem !important; }
+html.compact main .lg\:p-8 { padding: 1rem !important; }
+html.compact main .gap-4 { gap: 0.5rem !important; }
+html.compact main .gap-6 { gap: 0.875rem !important; }
+html.compact main .space-y-6 > * + * { margin-top: 0.875rem !important; }

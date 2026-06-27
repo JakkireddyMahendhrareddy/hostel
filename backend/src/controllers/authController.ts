@@ -163,6 +163,59 @@ export const authController = {
     }
   },
 
+  // Public self sign-up (creates a Hostel Owner account)
+  async signup(req: Request, res: Response) {
+    try {
+      const { full_name, phone, email, password } = req.body;
+
+      if (!full_name || !phone || !email || !password) {
+        return res.status(400).json({
+          success: false,
+          error: 'Full name, phone, email and password are required',
+        });
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ success: false, error: 'Invalid email format' });
+      }
+      if (!/^[0-9]{10}$/.test(phone)) {
+        return res.status(400).json({ success: false, error: 'Enter a valid 10-digit phone number' });
+      }
+      if (String(password).length < 6) {
+        return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+      }
+
+      // Reject duplicate email or phone
+      const existing = await db('users')
+        .where('email', email)
+        .orWhere('phone', phone)
+        .first();
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          error: 'An account with this email or phone already exists',
+        });
+      }
+
+      const password_hash = await hashPassword(password);
+      const [user_id] = await db('users').insert({
+        email,
+        phone,
+        full_name,
+        password_hash,
+        role_id: 2, // Hostel Owner
+        is_active: true,
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: { user_id, message: 'Account created successfully' },
+      });
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  },
+
   // Get current user
   async me(req: AuthRequest, res: Response) {
     try {

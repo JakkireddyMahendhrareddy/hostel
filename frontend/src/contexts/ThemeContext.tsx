@@ -3,11 +3,24 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 export type ThemeMode = 'light' | 'dark';
 export type FontSize = 'small' | 'medium' | 'large';
 
+export type OptionKey =
+  | 'reduceMotion'
+  | 'highContrast'
+  | 'compactMode'
+  | 'hapticFeedback'
+  | 'keepScreenOn';
+
 export interface ThemeSettings {
   mode: ThemeMode;
   primaryColor: string;
   fontSize: FontSize;
   fontFamily: string;
+  // Additional options
+  reduceMotion: boolean;
+  highContrast: boolean;
+  compactMode: boolean;
+  hapticFeedback: boolean;
+  keepScreenOn: boolean;
 }
 
 const defaultTheme: ThemeSettings = {
@@ -15,6 +28,11 @@ const defaultTheme: ThemeSettings = {
   primaryColor: '#4f46e5', // Indigo-600
   fontSize: 'medium',
   fontFamily: 'Inter',
+  reduceMotion: false,
+  highContrast: false,
+  compactMode: false,
+  hapticFeedback: true,
+  keepScreenOn: false,
 };
 
 interface ThemeContextType {
@@ -24,6 +42,7 @@ interface ThemeContextType {
   setPrimaryColor: (color: string) => void;
   setFontSize: (size: FontSize) => void;
   setFontFamily: (family: string) => void;
+  setOption: (key: OptionKey, value: boolean) => void;
   resetTheme: () => void;
 }
 
@@ -60,6 +79,11 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           primaryColor: parsed.primaryColor || defaultTheme.primaryColor,
           fontSize: parsed.fontSize || defaultTheme.fontSize,
           fontFamily: parsed.fontFamily || defaultTheme.fontFamily,
+          reduceMotion: parsed.reduceMotion ?? defaultTheme.reduceMotion,
+          highContrast: parsed.highContrast ?? defaultTheme.highContrast,
+          compactMode: parsed.compactMode ?? defaultTheme.compactMode,
+          hapticFeedback: parsed.hapticFeedback ?? defaultTheme.hapticFeedback,
+          keepScreenOn: parsed.keepScreenOn ?? defaultTheme.keepScreenOn,
         };
       }
     } catch (error) {
@@ -171,6 +195,14 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, [theme.primaryColor, theme.fontSize, theme.fontFamily]);
 
+  // Apply functional accessibility/layout options as root classes
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('reduce-motion', theme.reduceMotion);
+    root.classList.toggle('high-contrast', theme.highContrast);
+    root.classList.toggle('compact', theme.compactMode);
+  }, [theme.reduceMotion, theme.highContrast, theme.compactMode]);
+
   // Save to localStorage whenever theme changes
   useEffect(() => {
     try {
@@ -200,6 +232,10 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setTheme((prev) => ({ ...prev, fontFamily: family }));
   };
 
+  const setOption = (key: OptionKey, value: boolean) => {
+    setTheme((prev) => ({ ...prev, [key]: value }));
+  };
+
   const resetTheme = () => {
     setTheme(defaultTheme);
   };
@@ -213,6 +249,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setPrimaryColor,
         setFontSize,
         setFontFamily,
+        setOption,
         resetTheme,
       }}
     >

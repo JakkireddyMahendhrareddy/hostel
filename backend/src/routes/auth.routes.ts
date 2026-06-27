@@ -5,6 +5,7 @@ import { authMiddleware, isAdmin } from '../middleware/auth.js';
 const router = Router();
 
 // Public routes
+router.post('/signup', authController.signup);
 router.post('/login', authController.login);
 router.post('/logout', authController.logout);
 router.post('/forgot-password', authController.forgotPassword);

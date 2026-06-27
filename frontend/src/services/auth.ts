@@ -35,6 +35,16 @@ export const authService = {
     return response.data;
   },
 
+  async signup(payload: {
+    full_name: string;
+    phone: string;
+    email: string;
+    password: string;
+  }): Promise<any> {
+    const response = await api.post('/auth/signup', payload);
+    return response.data;
+  },
+
   async logout(): Promise<void> {
     try {
       await api.post('/auth/logout');

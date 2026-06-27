@@ -119,56 +119,49 @@ export const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-cyan-50 flex flex-col">
       {/* Mobile View */}
-      <div className="flex-1 flex flex-col md:hidden">
-        {/* Top Section with Illustration */}
-        <div className="flex-1 flex flex-col items-center justify-center px-6 pt-8 pb-4">
-          {/* Hostel Icon */}
-          <div className="relative mb-6">
-            <div className="w-32 h-32 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-full flex items-center justify-center shadow-lg">
-              <Building2 className="w-16 h-16 text-white" />
+      <div className="flex-1 flex flex-col md:hidden bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+        {/* Hero Section */}
+        <div className="flex flex-col items-center justify-center px-6 pt-12 pb-8">
+          {/* Logo Badge */}
+          <div className="relative mb-5">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-900/60 ring-4 ring-white/10">
+              <Building2 className="w-10 h-10 text-white" strokeWidth={2.2} />
             </div>
-            {/* Floating icons */}
-            <div className="absolute -top-2 -right-2 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center">
-              <Users className="w-5 h-5 text-blue-500" />
-            </div>
-            <div className="absolute -bottom-2 -left-2 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center">
-              <CreditCard className="w-5 h-5 text-cyan-500" />
-            </div>
-            <div className="absolute top-1/2 -left-4 w-8 h-8 bg-white rounded-full shadow-md flex items-center justify-center">
-              <Shield className="w-4 h-4 text-green-500" />
+            <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-xl bg-slate-800 shadow-md ring-1 ring-slate-700 flex items-center justify-center">
+              <Shield className="w-4 h-4 text-emerald-400" />
             </div>
           </div>
 
           {/* Title */}
-          <h1 className="text-2xl font-bold text-gray-800 mb-2 text-center">
-            Hostel Management
+          <h1 className="text-3xl font-extrabold tracking-tight text-white">
+            Hostel<span className="text-indigo-400">Hub</span>
           </h1>
-          <p className="text-gray-500 text-center text-sm max-w-xs">
-            Simplify your hostel operations with smart room and fee management
+          <p className="mt-2 text-slate-400 text-center text-sm font-medium max-w-xs">
+            Your hostel, beautifully managed.
           </p>
         </div>
 
         {/* Login Form Card */}
-        <div className="bg-white rounded-t-3xl shadow-lg px-6 py-8">
-          <h2 className="text-xl font-semibold text-gray-800 mb-1 text-center">Welcome Back</h2>
-          <p className="text-gray-500 text-sm mb-6 text-center">Sign in to continue</p>
+        <div className="flex-1 bg-slate-900/80 backdrop-blur-xl rounded-t-[2rem] border-t border-slate-800 shadow-[0_-8px_40px_rgba(0,0,0,0.5)] px-6 pt-8 pb-10">
+          <h2 className="text-2xl font-bold text-white text-center">Welcome Back</h2>
+          <p className="text-slate-400 text-sm mt-1 mb-7 text-center">Sign in to continue</p>
 
           {/* Error Alert */}
           {loginError && (
-            <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200">
-              <p className="text-sm text-red-600">{loginError}</p>
+            <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30">
+              <p className="text-sm text-red-400">{loginError}</p>
             </div>
           )}
 
           <form onSubmit={formik.handleSubmit} className="space-y-4">
             {/* Email/Phone Input */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                 Phone or Email
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">
+                Phone or Email
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Mail className="h-5 w-5 text-slate-500" />
                 </div>
                 <input
                   name="identifier"
@@ -177,26 +170,26 @@ export const LandingPage: React.FC = () => {
                   value={formik.values.identifier}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
-                  className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition ${
+                  className={`w-full pl-11 pr-4 py-3.5 text-white placeholder-slate-500 bg-slate-800/80 border-2 rounded-2xl outline-none focus:bg-slate-800 focus:ring-4 focus:ring-indigo-500/20 transition ${
                     formik.touched.identifier && formik.errors.identifier
-                      ? 'border-red-500'
-                      : 'border-gray-200'
+                      ? 'border-red-500/60 focus:border-red-500'
+                      : 'border-slate-700 focus:border-indigo-500'
                   }`}
                 />
               </div>
               {formik.touched.identifier && formik.errors.identifier && (
-                <p className="mt-1 text-xs text-red-500">{formik.errors.identifier}</p>
+                <p className="mt-1.5 text-xs font-medium text-red-400">{formik.errors.identifier}</p>
               )}
             </div>
 
             {/* Password Input */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">
                 Password
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-slate-500" />
                 </div>
                 <input
                   name="password"
@@ -205,68 +198,75 @@ export const LandingPage: React.FC = () => {
                   value={formik.values.password}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
-                  className={`w-full pl-10 pr-12 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition ${
+                  className={`w-full pl-11 pr-12 py-3.5 text-white placeholder-slate-500 bg-slate-800/80 border-2 rounded-2xl outline-none focus:bg-slate-800 focus:ring-4 focus:ring-indigo-500/20 transition ${
                     formik.touched.password && formik.errors.password
-                      ? 'border-red-500'
-                      : 'border-gray-200'
+                      ? 'border-red-500/60 focus:border-red-500'
+                      : 'border-slate-700 focus:border-indigo-500'
                   }`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300"
                 >
                   {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400" />
+                    <EyeOff className="h-5 w-5" />
                   ) : (
-                    <Eye className="h-5 w-5 text-gray-400" />
+                    <Eye className="h-5 w-5" />
                   )}
                 </button>
               </div>
               {formik.touched.password && formik.errors.password && (
-                <p className="mt-1 text-xs text-red-500">{formik.errors.password}</p>
+                <p className="mt-1.5 text-xs font-medium text-red-400">{formik.errors.password}</p>
               )}
+            </div>
+
+            {/* Forgot Password */}
+            <div className="flex justify-end -mt-1">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-indigo-400 hover:text-indigo-300 text-sm font-semibold"
+              >
+                Forgot password?
+              </button>
             </div>
 
             {/* Sign In Button */}
             <button
               type="submit"
               disabled={formik.isSubmitting}
-              className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-cyan-600 transition shadow-md disabled:opacity-50"
+              className="w-full bg-gradient-to-r from-indigo-500 to-blue-600 text-white py-3.5 rounded-2xl font-semibold shadow-lg shadow-indigo-900/50 hover:from-indigo-400 hover:to-blue-500 active:scale-[0.99] transition disabled:opacity-60"
             >
               {formik.isSubmitting ? 'Signing in...' : 'Sign In'}
             </button>
-
-            {/* Forgot Password */}
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={() => setShowForgotPassword(true)}
-                className="text-blue-500 hover:text-blue-600 text-sm font-medium"
-              >
-              </button>
-            </div>
           </form>
 
+          {/* Create account */}
+          <div className="mt-5 text-center text-sm">
+            <span className="text-slate-400">New here? </span>
+            <button
+              type="button"
+              onClick={() => navigate('/signup')}
+              className="text-indigo-400 font-semibold hover:text-indigo-300"
+            >
+              Create account
+            </button>
+          </div>
+
           {/* Features */}
-          <div className="mt-8 flex justify-center gap-8">
-            <div className="text-center">
-              <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-1">
-                <Shield className="w-5 h-5 text-blue-500" />
-              </div>
-              <p className="text-xs text-gray-500">Secure</p>
+          <div className="mt-8 grid grid-cols-3 gap-3">
+            <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-800/50 py-3">
+              <Shield className="w-5 h-5 text-indigo-400" />
+              <span className="text-xs font-medium text-slate-400">Secure</span>
             </div>
-            <div className="text-center">
-              <div className="w-10 h-10 bg-cyan-50 rounded-full flex items-center justify-center mx-auto mb-1">
-                <Building2 className="w-5 h-5 text-cyan-500" />
-              </div>
-              <p className="text-xs text-gray-500">Easy</p>
+            <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-800/50 py-3">
+              <Building2 className="w-5 h-5 text-blue-400" />
+              <span className="text-xs font-medium text-slate-400">Easy</span>
             </div>
-            <div className="text-center">
-              <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-1">
-                <Users className="w-5 h-5 text-green-500" />
-              </div>
-              <p className="text-xs text-gray-500">Smart</p>
+            <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-slate-800 bg-slate-800/50 py-3">
+              <Users className="w-5 h-5 text-emerald-400" />
+              <span className="text-xs font-medium text-slate-400">Smart</span>
             </div>
           </div>
         </div>
@@ -429,8 +429,20 @@ export const LandingPage: React.FC = () => {
             </button>
           </form>
 
+          {/* Create account */}
+          <div className="mt-6 text-center text-sm">
+            <span className="text-gray-500">New here? </span>
+            <button
+              type="button"
+              onClick={() => navigate('/signup')}
+              className="text-blue-600 font-semibold hover:text-blue-700"
+            >
+              Create account
+            </button>
+          </div>
+
           {/* Footer */}
-          <div className="mt-8 text-center">
+          <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
               Secure login with enterprise-grade security
             </p>

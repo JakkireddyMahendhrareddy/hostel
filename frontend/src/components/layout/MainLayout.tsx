@@ -1,21 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, Outlet, useLocation } from 'react-router-dom';
 import {
-  Home,
-  Building2,
-  Users,
-  DollarSign,
-  FileText,
-  Settings,
-  LogOut,
-  Menu,
-  X,
-  TrendingUp,
-  User,
-  CreditCard,
-  Globe
+  Home, Building2, Users, DollarSign, FileText, Settings, LogOut, Menu, X,
+  TrendingUp, User, CreditCard, Globe, ChevronUp,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { Tooltip } from '../ui/Tooltip';
 import toast from 'react-hot-toast';
 
@@ -24,19 +14,16 @@ export const MainLayout: React.FC = () => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { user, logout } = useAuthStore();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
-
-  const handleLogoutClick = () => {
-    setShowLogoutConfirm(true);
-  };
 
   const handleLogoutConfirm = async () => {
     try {
       setIsLoggingOut(true);
       await logout();
       toast.success('Logged out successfully');
-      navigate('/login');
+      navigate('/');
     } catch (error) {
       toast.error('Logout failed');
       setIsLoggingOut(false);
@@ -45,169 +32,129 @@ export const MainLayout: React.FC = () => {
     }
   };
 
-  const handleLogoutCancel = () => {
-    setShowLogoutConfirm(false);
-  };
-
   const isAdmin = user?.role_id === 1;
 
   const navigation = isAdmin
     ? [
-        { name: 'Dashboard', href: '/dashboard', icon: Home },
-        { name: 'Hostels', href: '/hostels', icon: Building2 },
-        { name: 'Owners', href: '/owners', icon: Users },
-        { name: 'Reports', href: '/reports', icon: FileText },
-        { name: 'Settings', href: '/settings', icon: Settings },
+        { key: 'nav.dashboard', href: '/dashboard', icon: Home },
+        { key: 'nav.hostels', href: '/hostels', icon: Building2 },
+        { key: 'nav.owners', href: '/owners', icon: Users },
+        { key: 'nav.reports', href: '/reports', icon: FileText },
+        { key: 'nav.settings', href: '/settings', icon: Settings },
       ]
     : [
-        { name: 'Dashboard', href: '/owner/dashboard', icon: Home },
-        { name: 'Rooms', href: '/owner/rooms', icon: Building2 },
-        { name: 'Students', href: '/owner/students', icon: Users },
-        { name: 'Monthly Fees', href: '/owner/monthly-fees', icon: DollarSign },
-        { name: 'Collections', href: '/owner/collections', icon: CreditCard },
-        { name: 'Incomes', href: '/owner/income', icon: TrendingUp },
-        { name: 'Expenses', href: '/owner/expenses', icon: FileText },
-        { name: 'Reports', href: '/owner/reports', icon: FileText },
-        { name: 'Google Form', href: '/owner/webhook-setup', icon: Globe },
-        { name: 'Settings', href: '/owner/settings', icon: Settings },
+        { key: 'nav.dashboard', href: '/owner/dashboard', icon: Home },
+        { key: 'nav.rooms', href: '/owner/rooms', icon: Building2 },
+        { key: 'nav.students', href: '/owner/students', icon: Users },
+        { key: 'nav.monthlyFees', href: '/owner/monthly-fees', icon: DollarSign },
+        { key: 'nav.collections', href: '/owner/collections', icon: CreditCard },
+        { key: 'nav.incomes', href: '/owner/income', icon: TrendingUp },
+        { key: 'nav.expenses', href: '/owner/expenses', icon: FileText },
+        { key: 'nav.reports', href: '/owner/reports', icon: FileText },
+        { key: 'nav.googleForm', href: '/owner/webhook-setup', icon: Globe },
+        { key: 'nav.settings', href: '/owner/settings', icon: Settings },
       ];
+
+  const activeItem = navigation.find((n) => n.href === location.pathname);
+  const pageTitle = activeItem ? t(activeItem.key) : t('nav.dashboard');
+  const profileHref = isAdmin ? '/profile' : '/owner/profile';
+  const roleLabel = isAdmin ? t('role.admin') : t('role.owner');
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--content-bg)' }}>
-      {/* Mobile sidebar backdrop */}
+      {/* Mobile backdrop */}
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-gray-900 bg-opacity-50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
+        <div className="fixed inset-0 bg-gray-900/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar - Fixed on desktop, slide-in on mobile */}
+      {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 border-r border-gray-200 flex flex-col transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
-        style={{ backgroundColor: 'var(--sidebar-bg)', color: 'var(--sidebar-text-color)' }}
+        style={{ backgroundColor: 'var(--sidebar-bg)', color: '#fff' }}
       >
-        {/* Sidebar Header */}
-        <div className="flex items-center justify-center h-20 px-6 border-b border-gray-200 flex-shrink-0 relative">
-          <h1 className="text-sm font-bold text-center leading-tight flex items-center gap-2" style={{ color: 'var(--sidebar-text-color)' }}>
-            <span className="text-yellow-500">★</span>
-            <span className="text-orange-500">★</span>
-            <span>
-              Hostel<br />
-              Administrative<br />
-              System
-            </span>
-            <span className="text-yellow-500">★</span>
-            <span className="text-orange-500">★</span>
-          </h1>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden absolute right-4 hover:opacity-80 transition-opacity"
-            style={{ color: 'var(--sidebar-text-color)' }}
-          >
+        {/* Brand */}
+        <div className="flex items-center gap-3 h-20 px-5 flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
+            <Building2 className="w-6 h-6 text-white" />
+          </div>
+          <span className="text-lg font-bold leading-tight text-white">
+            {t('brand.name')}
+          </span>
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto text-white/90">
             <X className="h-6 w-6" />
           </button>
         </div>
 
-        {/* Sidebar Navigation */}
-        <nav className="flex-1 overflow-y-auto p-4">
-          {navigation.map((item) => (
-            <Link
-              key={item.name}
-              to={item.href}
-              className={`flex items-center px-4 py-3 mb-1 text-sm font-medium rounded-lg transition-colors ${
-                location.pathname === item.href
-                  ? 'text-white'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: location.pathname === item.href ? 'var(--primary-color)' : 'transparent',
-                color: location.pathname === item.href ? 'white' : 'var(--sidebar-text-color)',
-                opacity: location.pathname === item.href ? 1 : 0.9,
-              }}
-              onClick={() => setSidebarOpen(false)}
-            >
-              <item.icon className="h-5 w-5 mr-3" />
-              {item.name}
-            </Link>
-          ))}
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+          {navigation.map((item) => {
+            const active = location.pathname === item.href;
+            return (
+              <Link
+                key={item.key}
+                to={item.href}
+                onClick={() => setSidebarOpen(false)}
+                className={`flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
+                  active ? 'bg-white shadow-sm' : 'text-white/90 hover:bg-white/10'
+                }`}
+                style={active ? { color: 'var(--primary-color)' } : undefined}
+              >
+                <item.icon className="h-5 w-5 mr-3" />
+                {t(item.key)}
+              </Link>
+            );
+          })}
         </nav>
 
+        {/* Footer: profile + logout */}
+        <div className="p-3 border-t border-white/15 flex-shrink-0 space-y-1">
+          <button
+            onClick={() => { navigate(profileHref); setSidebarOpen(false); }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/10 transition-colors"
+          >
+            <span className="w-9 h-9 rounded-full bg-white flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+            </span>
+            <span className="text-left min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-white truncate">{user?.full_name}</span>
+              <span className="block text-xs text-white/70">{roleLabel}</span>
+            </span>
+            <ChevronUp className="w-4 h-4 text-white/70" />
+          </button>
+          <button
+            onClick={() => setShowLogoutConfirm(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/90 hover:bg-white/10 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            <span className="text-sm font-medium">{t('common.logout')}</span>
+          </button>
+        </div>
       </aside>
 
-      {/* Main Content Area */}
+      {/* Main area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar - Header */}
-        <header className="h-20 flex-shrink-0 shadow-md" style={{ backgroundColor: 'var(--header-bg)', color: 'var(--header-text-color)' }}>
-          <div className="h-full flex items-center justify-between px-4 sm:px-6 lg:px-8">
-            {/* Mobile menu button */}
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden hover:opacity-80 focus:outline-none transition-opacity"
-              style={{ color: 'var(--header-text-color)' }}
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-
-            {/* Page Title - Left Side */}
-            <div className="flex-1 ml-4 lg:ml-0">
-              <h1 className="text-xl font-bold" style={{ color: 'var(--header-text-color)' }}>
-                {location.pathname === '/dashboard' || location.pathname === '/owner/dashboard' ? 'Dashboard' :
-                 location.pathname === '/hostels' ? 'Hostels' :
-                 location.pathname === '/owners' ? 'Owners' :
-                 location.pathname === '/rooms' || location.pathname === '/owner/rooms' ? 'Rooms' :
-                 location.pathname === '/students' || location.pathname === '/owner/students' ? 'Students' :
-                 location.pathname === '/monthly-fees' || location.pathname === '/owner/monthly-fees' ? 'Monthly Fees' :
-                 location.pathname === '/income' || location.pathname === '/owner/income' ? 'Income' :
-                 location.pathname === '/expenses' || location.pathname === '/owner/expenses' ? 'Expenses' :
-                 location.pathname === '/reports' || location.pathname === '/owner/reports' ? 'Reports' :
-                 location.pathname === '/settings' || location.pathname === '/owner/settings' ? 'Settings' :
-                 location.pathname === '/profile' || location.pathname === '/owner/profile' ? 'Profile' :
-                 location.pathname === '/owner/webhook-setup' ? 'Google Form Setup' :
-                 'Dashboard'}
-              </h1>
-            </div>
-
-            {/* Right side - Container with Profile, Name/Role, and Logout */}
-            <div 
-              className="flex items-center gap-3 px-4 py-2 rounded-lg"
-              style={{ 
-                backgroundColor: 'var(--sidebar-bg)',
-                opacity: 0.9
-              }}
-            >
-              {/* Profile Icon */}
-              <Tooltip text="View Profile" position="bottom">
-                <button
-                  onClick={() => navigate(isAdmin ? '/profile' : '/owner/profile')}
-                  className="h-8 w-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
-                >
-                  <User className="h-4 w-4 text-primary-600" />
-                </button>
-              </Tooltip>
-
-              {/* User Info - Name and Role */}
-              <div className="hidden sm:flex flex-col items-start">
-                <p className="text-sm font-bold leading-tight" style={{ color: 'var(--header-text-color)' }}>{user?.full_name}</p>
-                <p className="text-xs font-normal" style={{ color: 'var(--header-text-color)', opacity: 0.9 }}>{user?.role}</p>
-              </div>
-
-              {/* Logout Button */}
-              <Tooltip text="Logout" position="bottom">
-                <button
-                  onClick={handleLogoutClick}
-                  className="h-8 w-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
-                >
-                  <LogOut className="h-4 w-4 text-primary-600" />
-                </button>
-              </Tooltip>
-            </div>
+        {/* Top bar */}
+        <header className="h-16 flex-shrink-0 flex items-center gap-3 px-4 sm:px-6 border-b border-gray-200 dark:border-gray-700"
+          style={{ backgroundColor: 'var(--card-bg)' }}>
+          <button onClick={() => setSidebarOpen(true)} className="lg:hidden" style={{ color: 'var(--text-color)' }}>
+            <Menu className="h-6 w-6" />
+          </button>
+          <h1 className="text-lg font-bold" style={{ color: 'var(--text-color)' }}>{pageTitle}</h1>
+          <div className="ml-auto">
+            <Tooltip text={t('common.logout')} position="bottom">
+              <button
+                onClick={() => setShowLogoutConfirm(true)}
+                className="h-9 w-9 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <LogOut className="h-4 w-4" style={{ color: 'var(--primary-color)' }} />
+              </button>
+            </Tooltip>
           </div>
         </header>
 
-        {/* Page Content - Scrollable */}
+        {/* Content */}
         <main className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--content-bg)' }}>
           <div className="p-4 sm:p-6 lg:p-8">
             <Outlet />
@@ -215,45 +162,33 @@ export const MainLayout: React.FC = () => {
         </main>
       </div>
 
-      {/* Logout Confirmation Modal */}
+      {/* Logout confirm */}
       {showLogoutConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full shadow-xl">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
-                  <LogOut className="h-5 w-5 text-orange-600" />
-                </div>
-                <h2 className="text-xl font-bold text-gray-900">Confirm Logout</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full shadow-xl">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
+                <LogOut className="h-5 w-5 text-orange-600" />
               </div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Confirm Logout</h2>
             </div>
-
-            {/* Body */}
             <div className="px-6 py-4">
-              <p className="text-gray-700 mb-2">
-                Are you sure you want to logout?
-              </p>
-              <p className="text-sm text-gray-600">
-                You will need to login again to access your account.
-              </p>
+              <p className="text-gray-700 dark:text-gray-200 mb-1">Are you sure you want to logout?</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">You will need to login again to access your account.</p>
             </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-3">
               <button
-                type="button"
-                onClick={handleLogoutCancel}
+                onClick={() => setShowLogoutConfirm(false)}
                 disabled={isLoggingOut}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                type="button"
                 onClick={handleLogoutConfirm}
                 disabled={isLoggingOut}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-white rounded-lg disabled:opacity-50"
+                style={{ backgroundColor: 'var(--primary-color)' }}
               >
                 {isLoggingOut ? 'Logging out...' : 'Logout'}
               </button>

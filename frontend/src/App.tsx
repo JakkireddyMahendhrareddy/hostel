@@ -4,9 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store/authStore';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { LanguageProvider } from './contexts/LanguageContext';
 import { LandingPage } from './pages/LandingPage';
 import { AdminLogin } from './pages/AdminLogin';
 import { OwnerLogin } from './pages/OwnerLogin';
+import { SignUp } from './pages/SignUp';
 import { MainLayout } from './components/layout/MainLayout';
 import { Dashboard } from './pages/Dashboard';
 import { OwnersPage } from './pages/OwnersPage';
@@ -73,11 +75,13 @@ function App() {
 
   return (
     <ThemeProvider>
+      <LanguageProvider>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
         <Routes>
           {/* Public Routes - Landing and Login Pages */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/signup" element={<SignUp />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/owner/login" element={<OwnerLogin />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -330,6 +334,7 @@ function App() {
         />
         </BrowserRouter>
       </QueryClientProvider>
+      </LanguageProvider>
     </ThemeProvider>
   );
 }
